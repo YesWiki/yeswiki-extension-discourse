@@ -1,0 +1,17 @@
+parameters:
+  discourse_connect:
+    # shared secret between this wiki and Discourse - set the real value in wakka.config.php,
+    # e.g. $wakkaConfig['discourse_connect']['sso_secret'] = 'xxxx';
+    sso_secret: ''
+
+services:
+  _defaults:
+    autowire: true
+    public: true
+
+  YesWiki\Discourse\Service\:
+    resource: 'services/*'
+
+  # Allows to use controllers as services
+  YesWiki\Discourse\Controller\:
+    resource: 'controllers/*'

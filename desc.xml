@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<plugin name="yeswiki-discourse-connect" version="0.1" active="1">
+  <author>YesWiki community</author>
+  <label>Discourse Connect (SSO)</label>
+  <desc>Lets Discourse use this wiki's accounts as its login provider via the DiscourseConnect (SSO) protocol.</desc>
+</plugin>
