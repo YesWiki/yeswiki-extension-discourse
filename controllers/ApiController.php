@@ -2,34 +2,35 @@
 
 namespace YesWiki\Discourse\Controller;
 
-use Exception;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Routing\Attribute\Route;
 use YesWiki\Core\YesWikiController;
-use YesWiki\Core\Service\UserManager;
 use YesWiki\Discourse\Service\DiscourseConnectService;
+use YesWiki\Identity\Service\AuthenticationService;
+use YesWiki\Render\Service\MarkdownFormatterService;
+use YesWiki\Render\Service\TemplateEngine;
 
 class ApiController extends YesWikiController
 {
-    /**
-     * @Route("/api/discourse/sso", methods={"GET","POST"}, options={"acl":{"public"}})
-     */
-    public function discourseSso(Request $request)
+    public const LOGIN_CONTEXT = 'discourse-sso';
+
+    #[Route('/api/discourse/sso', methods: ['GET', 'POST'], options: ['acl' => ['public']])]
+    public function discourseSso(Request $request): Response
     {
         $discourseConnectService = $this->getService(DiscourseConnectService::class);
 
-        $sso = $request->query->get('sso', '');
-        $sig = $request->query->get('sig', '');
+        $sso = (string)$request->query->get('sso', '');
+        $sig = (string)$request->query->get('sig', '');
 
-        if (empty($sso) || empty($sig)) {
+        if ($sso === '' || $sig === '') {
             return $this->errorResponse(_t('DISCOURSE_INVALID_REQUEST'));
         }
 
         try {
             $sigValid = $discourseConnectService->verifySignature($sso, $sig);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->errorResponse(_t('DISCOURSE_NOT_CONFIGURED'));
         }
         if (!$sigValid) {
@@ -38,24 +39,24 @@ class ApiController extends YesWikiController
 
         try {
             $payload = $discourseConnectService->decodePayload($sso);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->errorResponse(_t('DISCOURSE_INVALID_REQUEST'));
         }
 
-        $user = $this->getService(UserManager::class)->getLoggedUser();
+        $user = $this->getService(AuthenticationService::class)->getLoggedUser();
 
         if (empty($user)) {
-            return new Response(
-                $this->wiki->Header()
-                . $this->wiki->Format('{{login context="login-page" signupurl="0"}}')
-                . $this->wiki->Footer()
-            );
+            return new Response($this->getService(TemplateEngine::class)->renderPage(
+                $this->getService(MarkdownFormatterService::class)->format(
+                    '{{login template="login-form.twig" context="' . self::LOGIN_CONTEXT . '" signupurl="0"}}'
+                )
+            ));
         }
 
         try {
             $claims = $discourseConnectService->getClaimsForUser($user, $payload['nonce']);
             $response = $discourseConnectService->buildResponse($claims);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             return $this->errorResponse(_t('DISCOURSE_NOT_CONFIGURED'));
         }
 
@@ -70,7 +71,7 @@ class ApiController extends YesWikiController
     private function errorResponse(string $message): Response
     {
         return new Response(
-            '<div class="alert alert-danger">' . htmlspecialchars($message, ENT_COMPAT, 'UTF-8') . '</div>',
+            '<div class="yw-alert yw-alert--danger" role="alert">' . htmlspecialchars($message, ENT_COMPAT, 'UTF-8') . '</div>',
             Response::HTTP_BAD_REQUEST
         );
     }

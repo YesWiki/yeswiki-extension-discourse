@@ -1,94 +1,94 @@
 # Extension discourse
 
-## Discourse Connect (SSO)
+Permet à un forum Discourse d'utiliser les comptes du wiki pour se connecter,
+avec le protocole DiscourseConnect de Discourse (anciennement « Discourse SSO »).
 
-Lets a Discourse forum use this wiki's user accounts as its login provider, via
-Discourse's own **DiscourseConnect** protocol (formerly known as "Discourse
-SSO").
+C'est bien plus léger qu'un serveur OpenID Connect. Le wiki et Discourse
+partagent un secret, et le wiki répond sur une seule URL. Le wiki ne garde ni
+session ni jeton pour ça. Discourse génère et vérifie lui-même son `nonce` à
+usage unique.
 
-This is a much lighter integration than a full OpenID Connect server: there is a
-single shared secret between the wiki and Discourse, and one endpoint. YesWiki
-keeps no session/token state of its own for this — Discourse generates and
-verifies its own one-time `nonce`.
+## Comment se passe une connexion
 
-## How it works, in short
+1. Une personne clique sur « Se connecter » dans Discourse. Discourse l'envoie
+   sur `/?api/discourse/sso` du wiki, avec une charge signée.
+2. Si elle n'est pas connectée au wiki, la même URL affiche le formulaire de
+   connexion du wiki. Une fois connectée, elle revient sur cette URL.
+3. Le wiki signe une réponse avec le secret partagé (nom d'utilisateur, email,
+   un identifiant qui ne change jamais) et renvoie le navigateur vers Discourse.
+   Discourse la connecte, et crée son compte Discourse la première fois.
 
-1. A visitor clicks "Log in" on Discourse. Discourse redirects them to this
-   wiki's `/api/discourse/sso` endpoint with a signed payload.
-2. If the visitor isn't logged into the wiki, they see the wiki's normal login
-   form right there (no extra redirect). Once they log in, they land back on the
-   same URL automatically.
-3. Once logged in, the wiki signs a response payload (username, email, a stable
-   user ID) with the shared secret and redirects the browser back to Discourse,
-   which logs the user in (creating the Discourse account on first login).
+Les deux côtés doivent être servis en HTTPS et avoir exactement le même
+secret. Un caractère de trop et chaque connexion échoue avec « Signature SSO
+invalide ».
 
-Both sides must be reachable over **HTTPS**, and must be configured with the
-**exact same secret** - if they don't match byte-for-byte, every login attempt
-fails with an invalid-signature error.
+## 1. Configurer YesWiki
 
-## 1. Configure YesWiki
-
-Generate a long random secret, for example:
+Activez l'extension, depuis `/admin/updates` ou en ligne de commande :
 
 ```sh
-openssl rand -hex 32
+./yeswicli extension:enable discourse
 ```
 
-Add it to this wiki's `wakka.config.php`:
+Générez un long secret aléatoire :
+
+```sh
+php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'
+```
+
+Ajoutez-le dans le `yeswiki.config.php` du wiki :
 
 ```php
-$wakkaConfig['discourse_connect']['sso_secret'] = '<paste the generated secret here>';
+'discourse_connect' => [
+    'sso_secret' => '<le secret généré>',
+],
 ```
 
-That's the only configuration needed on the YesWiki side. The endpoint is a
-fixed URL - you don't need to create a wiki page or embed anything:
+C'est tout côté wiki. Il n'y a pas de page à créer ni rien à insérer.
+L'URL à donner à Discourse est :
 
 ```
-https://<your-wiki-domain>/?api/discourse/sso
+https://<domaine-du-wiki>/?api/discourse/sso
 ```
 
-## 2. Configure Discourse
+## 2. Configurer Discourse
 
-In Discourse's admin panel, go to **Settings → Login** (or set the equivalent
-keys in `discourse.conf` / environment variables for a Docker install) and set:
+Dans l'administration de Discourse, rubrique Paramètres, Connexion (ou les clés
+équivalentes dans `app.yml` pour une installation Docker), réglez :
 
-| Setting                    | Value                                           |
-| -------------------------- | ----------------------------------------------- |
-| `enable_discourse_connect` | `true`                                          |
-| `discourse_connect_url`    | `https://<your-wiki-domain>/?api/discourse/sso` |
-| `discourse_connect_secret` | the exact same secret as `sso_secret` above     |
+| Paramètre | Valeur |
+|---|---|
+| `enable_discourse_connect` | `true` |
+| `discourse_connect_url` | `https://<domaine-du-wiki>/?api/discourse/sso` |
+| `discourse_connect_secret` | le même secret que `sso_secret` ci-dessus |
 
-Optional, depending on how you want the integration to behave:
+Deux réglages facultatifs comptent ici :
 
-- `auth_immediately` - if enabled, visitors are sent straight to the wiki's
-  login instead of seeing Discourse's own login screen first.
-- `discourse_connect_allows_all_return_paths` - leave this off (default) unless
-  you specifically need to support redirecting to arbitrary paths after login;
-  Discourse validates `return_sso_url` itself.
+- `auth_immediately` envoie directement sur la connexion du wiki, sans passer
+  par l'écran de connexion de Discourse.
+- `discourse_connect_allows_all_return_paths` reste désactivé, sauf besoin de
+  rediriger vers n'importe quel chemin après connexion. Discourse vérifie
+  lui-même `return_sso_url`.
 
-Any YesWiki account can log into Discourse this way - there is currently no
-group restriction. The user's wiki username is used as both the Discourse
-`external_id` (the permanent, unchanging account link - this is why it's the
-username and not the email, since the email is editable in a wiki account) and
-the suggested Discourse username. The wiki's authentication is trusted as
-sufficient proof of the email address (`email_verified` is always sent as
-`true`) - YesWiki itself has no separate email-confirmation step.
+Tout compte du wiki peut se connecter à Discourse. Il n'y a pas encore de
+restriction par groupe. Le nom d'utilisateur du wiki devient l'`external_id`
+Discourse, le lien permanent entre les deux comptes, et le nom d'utilisateur
+proposé dans Discourse. C'est le nom et pas l'email parce qu'on peut changer
+son email dans le wiki. Le wiki envoie toujours `email_verified=true`, YesWiki
+n'ayant pas d'étape de confirmation d'email à part.
 
-## Troubleshooting
+## En cas de problème
 
-- **"Invalid SSO signature"**: the two `sso_secret` / `discourse_connect_secret`
-  values don't match exactly (check for trailing whitespace/newlines when
-  pasting).
-- **"Discourse Connect is not configured on this wiki"**: `sso_secret` is empty
-  in `wakka.config.php` on the YesWiki side.
-- **"Invalid or malformed SSO request"**: the `sso`/`sig` query parameters are
-  missing, or the payload doesn't contain a `return_sso_url`/`nonce` - usually
-  means the request didn't actually come from Discourse's configured
-  `discourse_connect_url`.
+- « Signature SSO invalide » : les deux secrets diffèrent. Cherchez un espace
+  ou un retour à la ligne attrapé au copier-coller.
+- « Discourse Connect n'est pas configuré sur ce wiki » : `sso_secret` est vide
+  dans `yeswiki.config.php`.
+- « Requête SSO invalide ou malformée » : `sso` ou `sig` manque, ou la charge
+  n'a pas de `nonce` ou de `return_sso_url`. La requête ne vient sans doute pas
+  du Discourse qui a ce wiki comme `discourse_connect_url`.
 
-## What this tool intentionally does not do
+## Ce qu'elle ne fait pas
 
-- No admin/moderator mapping: being a wiki admin does not make you a Discourse
-  staff member.
-- No group-based access restriction: any wiki account can SSO into Discourse.
-- No single sign-out: logging out of the wiki does not log you out of Discourse.
+- Être admin du wiki ne rend pas admin ou modérateur de Discourse.
+- Elle ne peut pas tenir certains comptes du wiki à l'écart de Discourse.
+- Se déconnecter du wiki ne déconnecte pas de Discourse.

@@ -13,11 +13,11 @@
 
 ### Install
 
-In page `GererMisesAJour` on your YesWiki website, search extension `discourse` and install it.
+On your wiki's `/admin/updates` screen, install the `discourse` extension: installing it switches it on. From a shell: `./yeswicli extension:enable discourse`. Version `5.x` is for YesWiki Ectoplasme, `4.x` for Doryphore.
 
 ### Usage
 
-Usage help is described in `http://example.com/?doc/#tools/discourse/en/README.md` (replacing `http://example.com/?` by the `baseUrl` of your wiki). The same file can be found also here : https://github.com/YesWiki/yeswiki-extension-discourse/blob/main/docs/en/README.md
+Usage help is on your wiki's `/doc` page once the extension is on, and here: https://github.com/YesWiki/yeswiki-extension-discourse/blob/ectoplasme/docs/en/README.md
 
 ### Warranty
 
@@ -36,11 +36,11 @@ Extension [YesWiki](https://yeswiki.net/). Permet à un forum Discourse d'utilis
 
 ### Installation
 
-Dans la page `GererMisesAJour` de votre YesWiki, recherchez l'extension `discourse` et installez-la.
+Sur l'écran `/admin/updates` de votre wiki, installez l'extension `discourse` : l'installer l'active. En ligne de commande : `./yeswicli extension:enable discourse`. La version `5.x` est pour YesWiki Ectoplasme, la `4.x` pour Doryphore.
 
 ### Utilisation
 
-L'aide sur l'utilisation peut être trouvée sur `http://example.com/?doc/#tools/discourse/fr/README.md` (en remplaçant `http://example.com/?` par `baseUrl` de votre wiki). Le même fichier peut aussi être trouvé ici : https://github.com/YesWiki/yeswiki-extension-discourse/blob/main/docs/fr/README.md
+L'aide est sur la page `/doc` de votre wiki une fois l'extension activée, et ici : https://github.com/YesWiki/yeswiki-extension-discourse/blob/ectoplasme/docs/fr/README.md
 
 ### Garantie
 

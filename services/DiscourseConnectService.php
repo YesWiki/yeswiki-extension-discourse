@@ -5,26 +5,20 @@ namespace YesWiki\Discourse\Service;
 use Exception;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
-/**
- * Implements the DiscourseConnect (formerly "Discourse SSO") protocol: a single
- * shared HMAC-SHA256 secret authenticates a base64-encoded query-string payload
- * passed back and forth with Discourse. Entirely stateless - Discourse generates
- * and tracks its own nonce, we just echo it back.
- */
+/** DiscourseConnect: a shared HMAC-SHA256 secret signs a base64 query string; Discourse owns the nonce. */
 class DiscourseConnectService
 {
-    protected $params;
-
-    public function __construct(ParameterBagInterface $params)
+    public function __construct(private readonly ParameterBagInterface $params)
     {
-        $this->params = $params;
     }
 
+    /** The shared secret from discourse_connect.sso_secret, or an exception when it is empty. */
     public function getSecret(): string
     {
-        $secret = $this->params->get('discourse_connect')['sso_secret'] ?? '';
-        if (empty($secret)) {
-            throw new Exception('discourse_connect.sso_secret is not configured');
+        $config = $this->params->has('discourse_connect') ? $this->params->get('discourse_connect') : [];
+        $secret = is_array($config) ? (string)($config['sso_secret'] ?? '') : '';
+        if ($secret === '') {
+            throw new \Exception('discourse_connect.sso_secret is not configured');
         }
 
         return $secret;
@@ -37,23 +31,22 @@ class DiscourseConnectService
         return hash_equals($expected, strtolower($sig));
     }
 
-    /**
-     * @return array{nonce:string,return_sso_url:string}
-     */
+    /** @return array{nonce:string,return_sso_url:string} */
     public function decodePayload(string $sso): array
     {
         $decoded = base64_decode($sso, true);
         if ($decoded === false) {
-            throw new Exception('Malformed sso payload');
+            throw new \Exception('Malformed sso payload');
         }
 
         parse_str($decoded, $payload);
 
-        if (empty($payload['nonce']) || empty($payload['return_sso_url'])) {
-            throw new Exception('Missing nonce or return_sso_url in sso payload');
+        if (empty($payload['nonce']) || empty($payload['return_sso_url'])
+            || !is_string($payload['nonce']) || !is_string($payload['return_sso_url'])) {
+            throw new \Exception('Missing nonce or return_sso_url in sso payload');
         }
         if (!filter_var($payload['return_sso_url'], FILTER_VALIDATE_URL)) {
-            throw new Exception('Invalid return_sso_url in sso payload');
+            throw new \Exception('Invalid return_sso_url in sso payload');
         }
 
         return [
@@ -64,6 +57,7 @@ class DiscourseConnectService
 
     /**
      * @param array<string,string> $claims
+     *
      * @return array{sso:string,sig:string}
      */
     public function buildResponse(array $claims): array
@@ -75,20 +69,18 @@ class DiscourseConnectService
     }
 
     /**
-     * $user is whatever AuthController::getLoggedUser()/UserManager::getLoggedUser()
-     * returns - a plain array on some YesWiki versions, an ArrayAccess User entity on
-     * others. Both support the [] access used below, so it's left untyped here.
+     * @param array<string,mixed> $user
      *
      * @return array<string,string>
      */
-    public function getClaimsForUser($user, string $nonce): array
+    public function getClaimsForUser(array $user, string $nonce): array
     {
         return [
             'nonce' => $nonce,
-            'external_id' => $user['name'],
-            'email' => $user['email'],
-            'username' => $user['name'],
-            'name' => $user['name'],
+            'external_id' => (string)$user['name'],
+            'email' => (string)$user['email'],
+            'username' => (string)$user['name'],
+            'name' => (string)$user['name'],
             'email_verified' => 'true',
         ];
     }
