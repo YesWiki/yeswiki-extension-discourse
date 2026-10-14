@@ -85,6 +85,103 @@ email confirmation step.
   payload lacks `nonce` or `return_sso_url`. The request most likely did not
   come from the Discourse that has this wiki as its `discourse_connect_url`.
 
+## Opening a forum topic for each new entry
+
+The `discourse` field, added to a form, opens a topic on Discourse when an
+entry of that form is created. The topic takes the entry's title, and its
+first post links back to the entry. The entry then shows a "Discuss on the
+forum" button pointing to the topic.
+
+The topic is posted as the Discourse account of whoever created the entry,
+found through the SSO above (`external_id` is the wiki username). If that
+person has never logged into Discourse, or created the entry without being
+logged in, the topic is posted as `api_username`.
+
+Only creation opens a topic. Editing an entry, entries that existed before the
+field was added, and imported entries open none.
+
+### Settings
+
+In Discourse, under Admin, API, create a key with the user level "All users".
+A key tied to a single user cannot post in someone else's name. Then add the
+forum's address and the key to `yeswiki.config.php`, next to `sso_secret`:
+
+```php
+'discourse_connect' => [
+    'sso_secret' => '<the SSO secret>',
+    'url' => 'https://forum.example.org',
+    'api_key' => '<the API key>',
+    'api_username' => 'system',
+],
+```
+
+### In a form
+
+The field takes an optional `category`, the number of a Discourse category.
+It is the last number in the category's address: `/c/ateliers/5` is `5`.
+Without it, topics land in Discourse's default category.
+
+```json
+{ "type": "discourse", "name": "bf_discourse", "label": "Forum", "category": "5" }
+```
+
+The form designer has no block for this field yet. Add it in the form's
+"Wiki code (to copy-paste)" tab by pasting the line above into the list of
+fields. The designer then shows it as a custom field and keeps it as it is
+when the form is saved again.
+
+### Topic activity
+
+Next to the "Discuss on the forum" button, the entry shows the number of
+replies and twelve small bars, one per week, with the number of posts in that
+week. The bar on the right is the current week, drawn darker. Hovering a bar
+gives its dates and count. The wiki asks Discourse once per topic and keeps
+the answer for 15 minutes in `cache/discourse/`.
+
+The weeks are counted from Discourse's own timeline. Moderator notes such as
+"closed" or "pinned" count as posts, and in a topic of more than 300 posts the
+weeks are an estimate.
+
+### In cards
+
+The extension adds a card presentation, "Cards with forum activity". It is
+the standard card plus the replies and bars at the bottom of each card. It
+needs `dynamic="true"`:
+
+```
+{{entrylist id="12" template="discourse-card" dynamic="true"}}
+```
+
+Each card asks for its activity only when it scrolls into view. A card whose
+entry has no topic stays as it is.
+
+For a card template of your own, put the element where the activity should
+go, and load its script once:
+
+```twig
+{{ include_javascript('extensions/discourse/javascripts/discourse-activity.js', false, true) }}
+<discourse-activity entry="{{ entry.id_fiche }}"></discourse-activity>
+```
+
+In a dynamic (Vue) template, write `:entry="entry.tag"` instead. The element
+calls `/?api/discourse/entries/<entry>/activity`, which answers only if the
+reader may read the entry and the field.
+
+The server-side card (`template="card"` without `dynamic`) cannot show it: it
+only knows text slots.
+
+### When no topic is created
+
+The entry is always saved. If the topic could not be opened, a message says
+why after the save, and the wiki's log keeps a line about it. The usual causes:
+
+- `url` or `api_key` is empty.
+- The title is shorter than Discourse's `min_topic_title_length`, 15
+  characters by default.
+- Another topic already has this title, and `allow_duplicate_topic_titles` is
+  off.
+- The account posting the topic is not allowed to post in the category.
+
 ## What it does not do
 
 - Being a wiki admin does not make you a Discourse admin or moderator.

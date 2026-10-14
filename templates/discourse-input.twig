@@ -1,0 +1,9 @@
+{% extends "@core/layouts/input.twig" %}
+
+{% block input %}
+  {% if topicUrl %}
+    <a href="{{ topicUrl }}" target="_blank" rel="noopener">{{ _t('DISCOURSE_FIELD_DISCUSS') }}</a>
+  {% else %}
+    <p class="yw-text-muted">{{ _t('DISCOURSE_FIELD_WILL_CREATE') }}</p>
+  {% endif %}
+{% endblock %}

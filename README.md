@@ -5,7 +5,7 @@
 
 ## English
 
-[YesWiki](https://yeswiki.net/) extension. Lets a Discourse forum use this wiki's user accounts as its login provider.
+[YesWiki](https://yeswiki.net/) extension. Lets a Discourse forum use this wiki's user accounts as its login provider, and opens a forum topic for each new entry of a form.
 
 ### Authors
 
@@ -28,7 +28,7 @@ Developpers of this extension can not be responsible of consequences of the usag
 
 ## Français
 
-Extension [YesWiki](https://yeswiki.net/). Permet à un forum Discourse d'utiliser les comptes du wiki comme fournisseur d'identité.
+Extension [YesWiki](https://yeswiki.net/). Permet à un forum Discourse d'utiliser les comptes du wiki comme fournisseur d'identité, et ouvre un sujet sur le forum pour chaque nouvelle fiche d'un formulaire.
 
 ### Auteurs
 

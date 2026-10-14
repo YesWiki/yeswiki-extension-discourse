@@ -1,0 +1,15 @@
+{# presentation
+   label: DISCOURSE_PRESENTATION_CARD
+   category: card
+#}
+{% extends "@core/entries/index-dynamic-templates/card.twig" %}
+
+{% block assets %}
+  {{ parent() }}
+  {{ include_javascript('extensions/discourse/javascripts/discourse-activity.js', false, true) }}
+{% endblock %}
+
+{% block area_footer %}
+  {{ parent() }}
+  <discourse-activity class="area discourse-activity-area" :entry="entry.tag"></discourse-activity>
+{% endblock %}

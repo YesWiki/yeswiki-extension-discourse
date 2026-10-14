@@ -1,7 +1,7 @@
 {
   "name": "yeswiki/extension-discourse",
   "type": "yeswiki-extension",
-  "description": "Lets a Discourse forum use this wiki's accounts as its login provider (DiscourseConnect)",
+  "description": "Lets a Discourse forum use this wiki's accounts to log in, and opens a forum topic for each new entry",
   "license": "AGPL-3.0-or-later",
   "require": {
     "php": ">=8.3"
@@ -13,8 +13,8 @@
         "en": "Discourse Connect (SSO)"
       },
       "description": {
-        "fr": "Permet à un forum Discourse d'utiliser les comptes du wiki pour se connecter (protocole DiscourseConnect).",
-        "en": "Lets a Discourse forum use this wiki's accounts to log in (DiscourseConnect protocol)."
+        "fr": "Permet à un forum Discourse d'utiliser les comptes du wiki pour se connecter, et ouvre un sujet sur le forum pour chaque nouvelle fiche.",
+        "en": "Lets a Discourse forum use this wiki's accounts to log in, and opens a forum topic for each new entry."
       },
       "requires-extensions": []
     }

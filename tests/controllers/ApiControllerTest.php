@@ -3,13 +3,22 @@
 namespace YesWiki\Test\Discourse\Controller;
 
 use Psr\Container\ContainerInterface;
+use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Symfony\Component\HttpClient\MockHttpClient;
+use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
+use YesWiki\Content\Service\EntryManager;
+use YesWiki\Content\Service\FormManager;
+use YesWiki\Content\Service\PageManager;
 use YesWiki\Discourse\Controller\ApiController;
+use YesWiki\Discourse\Service\DiscourseApiService;
 use YesWiki\Discourse\Service\DiscourseConnectService;
+use YesWiki\Discourse\Service\TopicActivity;
 use YesWiki\Identity\Service\AuthenticationService;
 use YesWiki\Kernel\Service\CurrentRequest;
+use YesWiki\Kernel\Service\Journal;
 use YesWiki\Test\Core\ForcedParameterBag;
 use YesWiki\Test\Core\YesWikiTestCase;
 
@@ -23,6 +32,9 @@ class ApiControllerTest extends YesWikiTestCase
     private const RETURN_URL = 'https://forum.example.org/session/sso_login';
 
     private ?Request $previousRequest = null;
+    private string $formId = '';
+    private string $entryTag = '';
+    private string $cacheDir = '';
 
     protected function setUp(): void
     {
@@ -38,6 +50,16 @@ class ApiControllerTest extends YesWikiTestCase
     protected function tearDown(): void
     {
         $services = $this->getWiki()->services;
+        if ($this->entryTag !== '') {
+            $services->get(PageManager::class)->deleteOrphaned($this->entryTag);
+        }
+        if ($this->formId !== '') {
+            $services->get(FormManager::class)->delete($this->formId);
+        }
+        if ($this->cacheDir !== '' && is_dir($this->cacheDir)) {
+            array_map('unlink', glob($this->cacheDir . '/*.json') ?: []);
+            rmdir($this->cacheDir);
+        }
         $services->get(AuthenticationService::class)->logout();
         if ($this->previousRequest !== null) {
             $services->get(CurrentRequest::class)->replace($this->previousRequest);
@@ -45,27 +67,29 @@ class ApiControllerTest extends YesWikiTestCase
         parent::tearDown();
     }
 
-    private function controller(string $secret = self::SECRET): ApiController
+    /** @param array<class-string, object> $replaced */
+    private function controller(string $secret = self::SECRET, array $replaced = []): ApiController
     {
         $real = $this->getWiki()->services;
-        $service = new DiscourseConnectService(new ForcedParameterBag(
+        $replaced[DiscourseConnectService::class] ??= new DiscourseConnectService(new ForcedParameterBag(
             $real->get(ParameterBagInterface::class),
             ['discourse_connect' => ['sso_secret' => $secret]]
         ));
         $controller = new ApiController();
-        $controller->setServices(new class($real, $service) implements ContainerInterface {
-            public function __construct(private ContainerInterface $real, private DiscourseConnectService $service)
+        $controller->setServices(new class($real, $replaced) implements ContainerInterface {
+            /** @param array<class-string, object> $replaced */
+            public function __construct(private ContainerInterface $real, private array $replaced)
             {
             }
 
             public function get(string $id): mixed
             {
-                return $id === DiscourseConnectService::class ? $this->service : $this->real->get($id);
+                return $this->replaced[$id] ?? $this->real->get($id);
             }
 
             public function has(string $id): bool
             {
-                return $id === DiscourseConnectService::class || $this->real->has($id);
+                return isset($this->replaced[$id]) || $this->real->has($id);
             }
         });
 
@@ -142,5 +166,49 @@ class ApiControllerTest extends YesWikiTestCase
         $this->assertSame('n0nc3', $claims['nonce']);
         $this->assertSame($admin['name'], $claims['external_id']);
         $this->assertSame($admin['email'], $claims['email']);
+    }
+
+    private function topicActivity(): TopicActivity
+    {
+        $this->cacheDir = sys_get_temp_dir() . '/discourse-controller-test-' . bin2hex(random_bytes(4));
+        $settings = new ParameterBag(['discourse_connect' => ['url' => 'https://forum.example.org', 'api_key' => 'k3y']]);
+        $topic = json_encode([
+            'posts_count' => 4,
+            'post_stream' => ['stream' => [1, 2, 3, 4]],
+            'timeline_lookup' => [[1, 9], [3, 0]],
+        ]);
+        $api = new DiscourseApiService($settings, new MockHttpClient(fn () => new MockResponse((string)$topic)));
+
+        return new TopicActivity($api, $settings, $this->getWiki()->services->get(Journal::class), $this->cacheDir);
+    }
+
+    public function testAnEntrysActivityComesBackAsAFragment(): void
+    {
+        $services = $this->getWiki()->services;
+        $services->get(AuthenticationService::class)->connectFirstAdmin();
+        $forms = $services->get(FormManager::class);
+        $this->formId = (string)$forms->findNewId();
+        $forms->create([
+            'id' => $this->formId,
+            'label' => 'Discourse activity test',
+            'template' => [
+                ['type' => 'texte', 'name' => 'bf_titre', 'label' => 'Titre'],
+                ['type' => 'discourse', 'name' => 'bf_discourse', 'label' => 'Forum'],
+            ],
+            'entry_title_template' => '{{bf_titre}}',
+        ]);
+        $entries = $services->get(EntryManager::class);
+        $this->entryTag = (string)$entries->create($this->formId, ['bf_titre' => 'Discourse activity test entry'])['tag'];
+        $entries->update($this->entryTag, ['bf_discourse' => ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/x/42']]);
+
+        $controller = $this->controller(self::SECRET, [TopicActivity::class => $this->topicActivity()]);
+        $response = $controller->entryActivity($this->entryTag);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertStringContainsString(_t('DISCOURSE_ACTIVITY_REPLIES', ['n' => 3]), (string)$response->getContent());
+        $this->assertStringContainsString('<svg class="discourse-sparkline"', (string)$response->getContent());
+
+        $this->assertSame(204, $controller->entryActivity('PagePrincipale')->getStatusCode());
+        $this->assertSame(204, $controller->entryActivity('NoSuchEntryAnywhere')->getStatusCode());
     }
 }

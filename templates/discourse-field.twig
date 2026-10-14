@@ -1,0 +1,8 @@
+{% extends "@core/layouts/field.twig" %}
+
+{% block value %}
+  <span style="display: inline-flex; flex-wrap: wrap; align-items: center; gap: .75em;">
+    <a href="{{ topicUrl }}" class="yw-btn yw-btn--primary" target="_blank" rel="noopener">{{ _t('DISCOURSE_FIELD_DISCUSS') }}</a>
+    {{ activity|raw }}
+  </span>
+{% endblock %}

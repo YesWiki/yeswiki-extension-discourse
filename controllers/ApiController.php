@@ -68,6 +68,39 @@ class ApiController extends YesWikiController
         return new RedirectResponse($target);
     }
 
+    /** The replies and sparkline of the topic an entry's discourse field opened, or 204 when there is none to show. */
+    #[Route('/api/discourse/entries/{tag}/activity', methods: ['GET'], options: ['acl' => ['public']])]
+    public function entryActivity(string $tag): Response
+    {
+        $nothing = new Response('', Response::HTTP_NO_CONTENT);
+        if (!$this->getService(AclService::class)->hasAccess('read', $tag)) {
+            return $nothing;
+        }
+        $entry = $this->getService(EntryManager::class)->getOne($tag);
+        $formId = is_array($entry) ? (string)($entry['form_id'] ?? $entry['id_typeannonce'] ?? '') : '';
+        if ($formId === '') {
+            return $nothing;
+        }
+        $form = $this->getService(FormManager::class)->getOne($formId);
+
+        foreach ($form['prepared'] ?? [] as $field) {
+            if (!$field instanceof DiscourseField || !$field->canRead($entry)) {
+                continue;
+            }
+            $topicId = $field->topicIdOf($entry);
+            $activity = $topicId === '' ? null : $this->getService(TopicActivity::class)->get($topicId);
+            if ($activity !== null) {
+                $response = new Response($this->getService(ActivityPresenter::class)->fragment($activity));
+                $response->setPrivate();
+                $response->setMaxAge(300);
+
+                return $response;
+            }
+        }
+
+        return $nothing;
+    }
+
     private function errorResponse(string $message): Response
     {
         return new Response(
