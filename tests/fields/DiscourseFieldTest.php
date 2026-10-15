@@ -163,6 +163,14 @@ class DiscourseFieldTest extends YesWikiTestCase
         $this->assertSame('', trim($field->renderStaticIfPermitted(['bf_discourse' => ['topicId' => '', 'topicUrl' => 'javascript:alert(1)']])));
     }
 
+    public function testTheEditFormShowsTheSameForumButtonAsTheEntry(): void
+    {
+        $html = $this->field([])->renderInputIfPermitted(['bf_discourse' => ['topicId' => '', 'topicUrl' => 'https://forum.example.org/t/x/42']]);
+
+        $this->assertStringContainsString('class="yw-btn yw-btn--primary"', $html);
+        $this->assertStringContainsString('href="https://forum.example.org/t/x/42"', $html);
+    }
+
     public function testAFormWithTheFieldSavesItsEntryEvenWithoutDiscourse(): void
     {
         $services = $this->getWiki()->services;

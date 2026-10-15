@@ -104,7 +104,10 @@ class DiscourseField extends BazarField
             return '';
         }
 
-        return $this->render('@discourse/discourse-input.twig', ['topicUrl' => $stored['topicUrl']]);
+        return $this->render('@discourse/discourse-input.twig', [
+            'topicUrl' => $stored['topicUrl'],
+            'activity' => $this->activityOf($stored),
+        ]);
     }
 
     protected function renderStatic($entry)
@@ -114,12 +117,19 @@ class DiscourseField extends BazarField
         if ($stored['topicUrl'] === '') {
             return '';
         }
-        $activity = $stored['topicId'] === '' ? null : $this->getService(TopicActivity::class)->get($stored['topicId']);
 
         return $this->render('@discourse/discourse-field.twig', [
             'topicUrl' => $stored['topicUrl'],
-            'activity' => $activity === null ? '' : $this->getService(ActivityPresenter::class)->fragment($activity),
+            'activity' => $this->activityOf($stored),
         ]);
+    }
+
+    /** The topic's activity fragment shown beside the forum button, or '' when there is none yet. */
+    private function activityOf(array $stored): string
+    {
+        $activity = $stored['topicId'] === '' ? null : $this->getService(TopicActivity::class)->get($stored['topicId']);
+
+        return $activity === null ? '' : $this->getService(ActivityPresenter::class)->fragment($activity);
     }
 
     /** @param array<string, mixed>|null $entry */
