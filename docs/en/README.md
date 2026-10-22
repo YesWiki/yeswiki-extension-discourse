@@ -97,8 +97,10 @@ found through the SSO above (`external_id` is the wiki username). If that
 person has never logged into Discourse, or created the entry without being
 logged in, the topic is posted as `api_username`.
 
-Only creation opens a topic. Editing an entry, entries that existed before the
-field was added, and imported entries open none.
+An entry that has no topic yet gets one the next time it is saved: one whose
+topic could not be opened, or one that existed before the field was added. The
+topic is then posted in the name of whoever saves it. An entry that already
+has a topic keeps it, and imported entries open none.
 
 ### Settings
 
@@ -170,16 +172,24 @@ reader may read the entry and the field.
 The server-side card (`template="card"` without `dynamic`) cannot show it: it
 only knows text slots.
 
+### When the forum refuses the topic
+
+If Discourse refuses the topic itself, the entry is not saved either: the form
+comes back, filled in, with the forum's message, so the title can be fixed.
+Discourse refuses, among others:
+
+- a title shorter than its `min_topic_title_length`, 15 characters by default;
+- a title it finds unclear, such as "test";
+- a title another topic already has, when `allow_duplicate_topic_titles` is
+  off.
+
 ### When no topic is created
 
-The entry is always saved. If the topic could not be opened, a message says
-why after the save, and the wiki's log keeps a line about it. The usual causes:
+Otherwise the entry is saved without a topic. A message says why after the
+save, and the wiki's log keeps a line about it. The usual causes:
 
 - `url` or `api_key` is empty.
-- The title is shorter than Discourse's `min_topic_title_length`, 15
-  characters by default.
-- Another topic already has this title, and `allow_duplicate_topic_titles` is
-  off.
+- The forum does not answer.
 - The account posting the topic is not allowed to post in the category.
 
 ## What it does not do

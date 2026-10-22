@@ -5,6 +5,7 @@ namespace YesWiki\Discourse\Service;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use YesWiki\Discourse\Exception\TopicRefusedException;
 
 /** Calls to the Discourse REST API with the admin key from discourse_connect.api_key. */
 class DiscourseApiService
@@ -26,7 +27,8 @@ class DiscourseApiService
      *
      * @return array{topicId: string, topicUrl: string}
      *
-     * @throws \RuntimeException with Discourse's own error message when the topic is refused
+     * @throws TopicRefusedException with Discourse's own error message when the topic is refused
+     * @throws \RuntimeException     when Discourse does not answer
      */
     public function createTopic(string $title, string $raw, string $category, string $wikiUserName): array
     {
@@ -45,6 +47,9 @@ class DiscourseApiService
 
         if ($status < 200 || $status >= 300 || empty($data['topic_id'])) {
             $errors = isset($data['errors']) && is_array($data['errors']) ? implode(' ', $data['errors']) : '';
+            if ($status === 422 && $errors !== '') {
+                throw new TopicRefusedException($errors);
+            }
             throw new \RuntimeException($errors !== '' ? $errors : "Discourse answered HTTP $status");
         }
 

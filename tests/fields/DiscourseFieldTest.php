@@ -6,6 +6,8 @@ use Psr\Container\ContainerInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use YesWiki\Content\Entity\PageType;
+use YesWiki\Content\Exception\EntryValidationException;
 use YesWiki\Content\Service\EntryManager;
 use YesWiki\Content\Service\FieldFactory;
 use YesWiki\Content\Service\FormManager;
@@ -19,7 +21,7 @@ use YesWiki\Test\Core\YesWikiTestCase;
 
 require_once 'tests/YesWikiTestCase.php';
 
-/** The discourse field opens a topic when its entry is created, and only then. */
+/** The discourse field opens a topic when its entry is saved without one, and only then. */
 class DiscourseFieldTest extends YesWikiTestCase
 {
     private int $posts = 0;
@@ -112,17 +114,49 @@ class DiscourseFieldTest extends YesWikiTestCase
         $this->assertSame(1, $this->posts);
     }
 
+    /** @param array{topicId: string, topicUrl: string} $topic */
+    private function savedEntry(array $topic): string
+    {
+        $this->getWiki()->services->get(AuthenticationService::class)->connectFirstAdmin();
+        $this->entryTag = 'DiscourseFieldTestSavedEntry';
+        $this->getWiki()->services->get(PageManager::class)->save($this->entryTag, [
+            'title' => 'Atelier vélo du samedi',
+            'bf_discourse' => $topic,
+        ], '', true, null, PageType::ENTRY);
+
+        return $this->entryTag;
+    }
+
     public function testUpdatingAnEntryKeepsItsTopicAndPostsNothing(): void
     {
         $topic = ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/atelier-velo/42'];
         $saved = $this->field([$this->topicCreated()])->formatValuesBeforeSave([
-            'tag' => 'PagePrincipale',
+            'tag' => $this->savedEntry($topic),
             'title' => 'Atelier vélo du samedi',
-            'bf_discourse' => $topic,
+            'bf_discourse' => ['topicId' => '', 'topicUrl' => ''],
         ]);
 
         $this->assertSame(['bf_discourse' => $topic], $saved);
         $this->assertSame(0, $this->posts);
+    }
+
+    public function testUpdatingAnEntryWithoutTopicOpensOne(): void
+    {
+        $tag = $this->savedEntry(['topicId' => '', 'topicUrl' => '']);
+        $saved = $this->field([new MockResponse('', ['http_code' => 404]), $this->topicCreated()])->formatValuesBeforeSave([
+            'tag' => $tag,
+            'title' => 'Atelier vélo du samedi',
+        ]);
+
+        $this->assertSame(['bf_discourse' => ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/atelier-velo/42']], $saved);
+        $this->assertSame(1, $this->posts);
+    }
+
+    public function testTheEditFormOfAnEntryWithoutTopicSaysSavingWillOpenOne(): void
+    {
+        $html = $this->field([])->renderInputIfPermitted(['tag' => 'DiscourseFieldTestSavedEntry', 'bf_discourse' => ['topicId' => '', 'topicUrl' => '']]);
+
+        $this->assertStringContainsString(_t('DISCOURSE_FIELD_WILL_CREATE'), $html);
     }
 
     public function testAnImportedEntryOpensNoTopic(): void
@@ -137,13 +171,22 @@ class DiscourseFieldTest extends YesWikiTestCase
         $this->assertSame(0, $this->posts);
     }
 
-    public function testARefusedTopicStillLetsTheEntryBeSavedAndSaysWhy(): void
+    public function testATitleTheForumRefusesStopsTheEntryAndSaysWhy(): void
     {
-        $saved = $this->field([new MockResponse('{"errors":["Title is too short"]}', ['http_code' => 422])])
-            ->formatValuesBeforeSave(['tag' => 'DiscourseFieldTestUnsavedEntry', 'title' => 'Court']);
+        $field = $this->field([new MockResponse('{"errors":["Title is too short"]}', ['http_code' => 422])]);
+
+        $this->expectException(EntryValidationException::class);
+        $this->expectExceptionMessage('Title is too short');
+        $field->formatValuesBeforeSave(['tag' => 'DiscourseFieldTestUnsavedEntry', 'title' => 'Court']);
+    }
+
+    public function testAForumThatFailsStillLetsTheEntryBeSavedAndSaysWhy(): void
+    {
+        $saved = $this->field([new MockResponse('', ['http_code' => 502])])
+            ->formatValuesBeforeSave(['tag' => 'DiscourseFieldTestUnsavedEntry', 'title' => 'Atelier vélo du samedi']);
 
         $this->assertSame(['bf_discourse' => ['topicId' => '', 'topicUrl' => '']], $saved);
-        $this->assertStringContainsString('Title is too short', $this->getWiki()->services->get(FlashMessageService::class)->getMessage());
+        $this->assertStringContainsString('HTTP 502', $this->getWiki()->services->get(FlashMessageService::class)->getMessage());
     }
 
     public function testAWikiWithoutApiSettingsSaysSo(): void

@@ -9,6 +9,7 @@ use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
+use YesWiki\Content\Entity\PageType;
 use YesWiki\Content\Service\EntryManager;
 use YesWiki\Content\Service\FormManager;
 use YesWiki\Content\Service\PageManager;
@@ -199,7 +200,9 @@ class ApiControllerTest extends YesWikiTestCase
         ]);
         $entries = $services->get(EntryManager::class);
         $this->entryTag = (string)$entries->create($this->formId, ['bf_titre' => 'Discourse activity test entry'])['tag'];
-        $entries->update($this->entryTag, ['bf_discourse' => ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/x/42']]);
+        $pages = $services->get(PageManager::class);
+        $body = $pages->getOne($this->entryTag, null, false)['body'];
+        $pages->save($this->entryTag, ['bf_discourse' => ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/x/42']] + $body, '', true, null, PageType::ENTRY);
 
         $controller = $this->controller(self::SECRET, [TopicActivity::class => $this->topicActivity()]);
         $response = $controller->entryActivity($this->entryTag);

@@ -5,6 +5,7 @@ namespace YesWiki\Test\Discourse\Service;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use YesWiki\Discourse\Exception\TopicRefusedException;
 use YesWiki\Discourse\Service\DiscourseApiService;
 use YesWiki\Test\Core\YesWikiTestCase;
 
@@ -104,8 +105,18 @@ class DiscourseApiServiceTest extends YesWikiTestCase
             new MockResponse('{"errors":["Title is too short (minimum is 15 characters)"]}', ['http_code' => 422]),
         ]);
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(TopicRefusedException::class);
         $this->expectExceptionMessage('Title is too short');
         $service->createTopic('Court', 'Discussion', '', '');
+    }
+
+    public function testAForumThatFailsIsNotARefusal(): void
+    {
+        try {
+            $this->service([new MockResponse('', ['http_code' => 502])])->createTopic('Un titre assez long', 'Discussion', '', '');
+            $this->fail('a 502 should throw');
+        } catch (\RuntimeException $e) {
+            $this->assertNotInstanceOf(TopicRefusedException::class, $e);
+        }
     }
 }

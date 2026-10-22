@@ -100,8 +100,11 @@ d'utilisateur du wiki). Si elle ne s'est jamais connectée à Discourse, ou a
 créé la fiche sans être connectée, le sujet est publié au nom de
 `api_username`.
 
-Seule la création ouvre un sujet. Modifier une fiche n'en ouvre pas, pas plus
-que les fiches antérieures à l'ajout du champ ou les fiches importées.
+Une fiche qui n'a pas encore de sujet en reçoit un la prochaine fois qu'elle
+est enregistrée : celle dont le sujet n'a pas pu être ouvert, ou celle qui
+existait avant l'ajout du champ. Le sujet est alors publié au nom de la
+personne qui l'enregistre. Une fiche qui a déjà un sujet le garde, et les
+fiches importées n'en ouvrent pas.
 
 ### Réglages
 
@@ -176,17 +179,26 @@ que si la personne peut lire la fiche et le champ.
 La carte côté serveur (`template="card"` sans `dynamic`) ne peut pas
 l'afficher : elle ne connaît que des emplacements de texte.
 
+### Quand le forum refuse le sujet
+
+Si Discourse refuse le sujet lui-même, la fiche n'est pas enregistrée non plus :
+le formulaire revient, rempli, avec le message du forum, pour qu'on corrige le
+titre. Discourse refuse notamment :
+
+- un titre plus court que son `min_topic_title_length`, 15 caractères par
+  défaut ;
+- un titre qu'il juge peu clair, comme « test » ;
+- un titre déjà pris par un autre sujet, quand `allow_duplicate_topic_titles`
+  est désactivé.
+
 ### Quand aucun sujet n'est créé
 
-La fiche est toujours enregistrée. Si le sujet n'a pas pu être ouvert, un
-message en donne la raison après l'enregistrement, et le journal du wiki en
-garde une ligne. Les causes habituelles :
+Dans les autres cas, la fiche est enregistrée sans sujet. Un message en donne
+la raison après l'enregistrement, et le journal du wiki en garde une ligne.
+Les causes habituelles :
 
 - `url` ou `api_key` est vide.
-- Le titre est plus court que le `min_topic_title_length` de Discourse, 15
-  caractères par défaut.
-- Un autre sujet porte déjà ce titre, et `allow_duplicate_topic_titles` est
-  désactivé.
+- Le forum ne répond pas.
 - Le compte qui publie n'a pas le droit d'écrire dans la catégorie.
 
 ## Ce qu'elle ne fait pas

@@ -4,10 +4,12 @@ namespace YesWiki\Discourse\Field;
 
 use Psr\Container\ContainerInterface;
 use YesWiki\Content\Attribute\Field;
+use YesWiki\Content\Exception\EntryValidationException;
 use YesWiki\Content\Field\BazarField;
 use YesWiki\Content\Field\ContributesNoSearchableText;
 use YesWiki\Content\Service\ImportContext;
 use YesWiki\Content\Service\PageManager;
+use YesWiki\Discourse\Exception\TopicRefusedException;
 use YesWiki\Discourse\Service\ActivityPresenter;
 use YesWiki\Discourse\Service\DiscourseApiService;
 use YesWiki\Discourse\Service\TopicActivity;
@@ -16,7 +18,7 @@ use YesWiki\Kernel\Service\FlashMessageService;
 use YesWiki\Kernel\Service\Journal;
 use YesWiki\Kernel\Service\UrlFormatter;
 
-/** `discourse`: creating the entry opens a topic about it on the Discourse forum, and the entry links to it. */
+/** `discourse`: saving an entry without a topic opens one about it on the Discourse forum, and the entry links to it. */
 #[Field(['discourse'])]
 class DiscourseField extends BazarField
 {
@@ -52,12 +54,17 @@ class DiscourseField extends BazarField
 
     public function formatValuesBeforeSave($entry)
     {
-        $stored = $this->storedValue($entry);
         $tag = is_array($entry) ? (string)($entry['tag'] ?? '') : '';
+        if ($tag === '' || $this->getService(ImportContext::class)->isImporting()) {
+            return [(string)$this->propertyName => $this->storedValue($entry)];
+        }
 
-        if ($tag === '' || $this->getService(ImportContext::class)->isImporting()
-            || !empty($this->getService(PageManager::class)->getOne($tag))) {
-            return [(string)$this->propertyName => $stored];
+        $page = $this->getService(PageManager::class)->getOne($tag);
+        if (!empty($page)) {
+            $stored = $this->storedValue(is_array($page['body'] ?? null) ? $page['body'] : []);
+            if ($stored['topicId'] !== '') {
+                return [(string)$this->propertyName => $stored];
+            }
         }
 
         return [(string)$this->propertyName => $this->createTopic($entry, $tag)];
@@ -67,6 +74,8 @@ class DiscourseField extends BazarField
      * @param array<string, mixed> $entry
      *
      * @return array{topicId: string, topicUrl: string}
+     *
+     * @throws EntryValidationException when the forum refuses the topic, so the entry is not saved either
      */
     protected function createTopic(array $entry, string $tag): array
     {
@@ -89,6 +98,8 @@ class DiscourseField extends BazarField
                 $this->category,
                 is_array($user) ? (string)($user['name'] ?? '') : ''
             );
+        } catch (TopicRefusedException $e) {
+            throw new EntryValidationException(_t('DISCOURSE_TOPIC_REFUSED', ['error' => $e->getMessage()]), 0, $e);
         } catch (\Throwable $e) {
             $this->getService(Journal::class)->error("discourse: no topic for entry $tag: " . $e->getMessage(), ['exception' => $e]);
             $this->getService(FlashMessageService::class)->setMessage(_t('DISCOURSE_TOPIC_FAILED', ['error' => $e->getMessage()]));
@@ -100,9 +111,6 @@ class DiscourseField extends BazarField
     protected function renderInput($entry)
     {
         $stored = $this->storedValue($entry);
-        if ($stored['topicUrl'] === '' && is_array($entry) && !empty($entry['tag'])) {
-            return '';
-        }
 
         return $this->render('@discourse/discourse-input.twig', [
             'topicUrl' => $stored['topicUrl'],
