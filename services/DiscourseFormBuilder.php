@@ -4,7 +4,7 @@ namespace YesWiki\Discourse\Service;
 
 use YesWiki\Content\Entity\ExtendsFormBuilder;
 
-/** Puts the `discourse` field in the form builder, with the forum's categories to choose from. */
+/** Puts the `discourse` field in the form builder, with the forum's categories and tags to choose from. */
 class DiscourseFormBuilder implements ExtendsFormBuilder
 {
     public function __construct(private DiscourseApiService $api)
@@ -19,12 +19,21 @@ class DiscourseFormBuilder implements ExtendsFormBuilder
     public function formBuilderData(): array
     {
         $configured = $this->api->isConfigured();
-        try {
-            $categories = $configured ? $this->api->categories() : [];
-        } catch (\Throwable $e) {
-            $categories = [];
-        }
 
-        return ['discourse' => ['configured' => $configured, 'categories' => $categories]];
+        return ['discourse' => [
+            'configured' => $configured,
+            'categories' => $configured ? $this->orNothing(fn () => $this->api->categories()) : [],
+            'tags' => $configured ? $this->orNothing(fn () => $this->api->tags()) : [],
+        ]];
+    }
+
+    /** What $read gives, or nothing when the forum does not answer. */
+    private function orNothing(callable $read): array
+    {
+        try {
+            return $read();
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 }

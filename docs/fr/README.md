@@ -132,6 +132,14 @@ forum ». Ses réglages :
   Discourse. Quand le forum ne répond pas, le constructeur demande plutôt le
   numéro de la catégorie : le dernier nombre de son adresse, `/c/ateliers/5`
   donne `5`.
+- **Étiquettes des sujets** : séparées par des virgules, posées sur chaque
+  sujet par le compte `api_username`, qui crée celles qui manquent s'il en a le
+  droit. Si le forum les refuse, la fiche garde son sujet, sans étiquettes, et
+  un message le dit.
+- **Premier message du sujet** : en markdown. `{{title}}` donne le titre de la
+  fiche, `{{url}}` son adresse, et `{{bf_…}}` la valeur d'un champ de la fiche
+  (pour une liste, ses clés, pas ses libellés). Vide, le message renvoie
+  simplement vers la fiche.
 - **Texte d'aide** : une phrase affichée sous le champ dans le formulaire de
   saisie.
 - **Droits de lecture et d'écriture**, dans les paramètres avancés : qui voit le
@@ -142,7 +150,7 @@ sujet n'existe qu'une fois la fiche enregistrée. Dans le code wiki du
 formulaire, il s'écrit :
 
 ```json
-{ "type": "discourse", "name": "bf_discourse", "label": "Forum", "category": "5" }
+{ "type": "discourse", "name": "bf_discourse", "label": "Forum", "category": "5", "tags": "atelier, parcours", "topic_body": "Discussion autour de [{{title}}]({{url}})." }
 ```
 
 ### Activité du sujet

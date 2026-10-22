@@ -99,6 +99,30 @@ class DiscourseApiServiceTest extends YesWikiTestCase
         $this->assertSame('wikibot', $this->header($this->sent[0]['options']['headers'], 'Api-Username'));
     }
 
+    public function testTagsAreSetByTheConfiguredAccount(): void
+    {
+        $this->service([new MockResponse('{}')])->tagTopic('42', ['atelier', 'vélo']);
+
+        $this->assertSame('PUT', $this->sent[0]['method']);
+        $this->assertSame('https://forum.example.org/t/-/42.json', $this->sent[0]['url']);
+        $this->assertSame('wikibot', $this->header($this->sent[0]['options']['headers'], 'Api-Username'));
+        $this->assertSame(['tags' => ['atelier', 'vélo']], json_decode($this->sent[0]['options']['body'], true));
+    }
+
+    public function testRefusedTagsThrowDiscoursesMessage(): void
+    {
+        $this->expectExceptionMessage('You cannot create tags');
+        $this->service([new MockResponse('{"errors":["You cannot create tags"]}', ['http_code' => 403])])->tagTopic('42', ['nouvelle']);
+    }
+
+    public function testTheForumsTagsAreListedByName(): void
+    {
+        $tags = $this->service([new MockResponse(json_encode(['tags' => [['id' => 1, 'name' => 'team'], ['id' => 2, 'text' => 'atelier'], ['id' => 3]]]))])->tags();
+
+        $this->assertSame(['team', 'atelier'], $tags);
+        $this->assertSame('https://forum.example.org/tags.json', $this->sent[0]['url']);
+    }
+
     public function testARefusedTopicThrowsDiscoursesMessage(): void
     {
         $service = $this->service([

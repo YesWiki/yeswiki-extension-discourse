@@ -1,4 +1,4 @@
-// The `discourse` field in the form builder: the forum category its topics go to, picked from the forum's own list.
+// The `discourse` field in the form builder: the category, tags and first post of the topics it opens, from the forum's own lists.
 const container = document.getElementById('form-builder-container')
 let discourse = {}
 try {
@@ -7,6 +7,7 @@ try {
   discourse = {}
 }
 const categories = discourse.categories || {}
+const tags = Array.isArray(discourse.tags) ? discourse.tags : []
 const hasCategories = Object.keys(categories).length > 0
 const categoryOptions = {
   '': _t('DISCOURSE_FORM_BUILDER_NO_CATEGORY'),
@@ -38,6 +39,24 @@ window.formBuilderFields.discourse = ({ readConf, writeConf }) => ({
           value: '',
           description: _t('DISCOURSE_FORM_BUILDER_CATEGORY_ID_HINT'),
         },
+    tags: {
+      label: _t('DISCOURSE_FORM_BUILDER_TAGS'),
+      value: '',
+      placeholder: _t('DISCOURSE_FORM_BUILDER_TAGS_PLACEHOLDER'),
+      description:
+        tags.length > 0
+          ? _t('DISCOURSE_FORM_BUILDER_TAGS_EXISTING', {
+              tags: tags.join(', '),
+            })
+          : _t('DISCOURSE_FORM_BUILDER_TAGS_HINT'),
+    },
+    topic_body: {
+      label: _t('DISCOURSE_FORM_BUILDER_TOPIC_BODY'),
+      type: 'textarea',
+      rows: 5,
+      value: '',
+      description: _t('DISCOURSE_FORM_BUILDER_TOPIC_BODY_HINT'),
+    },
     hint: { label: _t('BAZ_FORM_EDIT_HELP'), value: '' },
     read_access: readConf,
     write_access: writeConf,

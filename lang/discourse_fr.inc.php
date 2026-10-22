@@ -7,6 +7,7 @@ return [
     'DISCOURSE_API_NOT_CONFIGURED' => 'La fiche est enregistrée, mais aucun sujet n\'a été créé sur le forum : discourse_connect.url et discourse_connect.api_key ne sont pas renseignés sur ce wiki.',
     'DISCOURSE_TOPIC_FAILED' => 'La fiche est enregistrée, mais le sujet n\'a pas pu être créé sur le forum : %{error}',
     'DISCOURSE_TOPIC_REFUSED' => 'La fiche n\'est pas enregistrée : le forum refuse d\'en faire un sujet. %{error}',
+    'DISCOURSE_TAGS_FAILED' => 'Le sujet est ouvert sur le forum, mais sans ses étiquettes : %{error}',
     'DISCOURSE_TOPIC_BODY' => 'Discussion autour de la fiche [%{title}](%{url}) du wiki.',
     'DISCOURSE_FIELD_DISCUSS' => 'Discuter sur le forum',
     'DISCOURSE_FIELD_WILL_CREATE' => 'Enregistrer cette fiche ouvre un sujet à son propos sur le forum. Le forum refuse les titres trop courts ou peu clairs.',

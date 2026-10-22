@@ -125,6 +125,13 @@ In the form designer, add a "Forum discussion" block. Its settings:
   Without one, topics land in Discourse's default category. When the forum
   does not answer, the designer asks for the category's number instead: the
   last number in its address, `/c/ateliers/5` is `5`.
+- **Topic tags**: comma separated, set on each topic by the `api_username`
+  account, which creates the missing ones if it may. If the forum refuses
+  them, the entry keeps its topic, without tags, and a message says so.
+- **First post of the topic**: in markdown. `{{title}}` gives the entry's
+  title, `{{url}}` its address, and `{{bf_…}}` the value of one of the entry's
+  fields (for a list, its keys, not its labels). Left empty, the post just
+  links to the entry.
 - **Help text**: a sentence shown under the field in the entry form.
 - **Read and write access**, under the advanced settings: who sees the forum
   button, and whose saves may open a topic.
@@ -133,7 +140,7 @@ The field has no default value and cannot be required: the topic only exists
 once the entry is saved. In the form's wiki code it reads:
 
 ```json
-{ "type": "discourse", "name": "bf_discourse", "label": "Forum", "category": "5" }
+{ "type": "discourse", "name": "bf_discourse", "label": "Forum", "category": "5", "tags": "workshop, path", "topic_body": "About [{{title}}]({{url}})." }
 ```
 
 ### Topic activity

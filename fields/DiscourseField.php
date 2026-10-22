@@ -25,18 +25,36 @@ class DiscourseField extends BazarField
     use ContributesNoSearchableText;
 
     protected const FIELD_CATEGORY = 6;
+    protected const FIELD_TAGS = 7;
+    protected const FIELD_TOPIC_BODY = 13;
 
     protected string $category;
+    /** @var list<string> */
+    protected array $tags;
+    protected string $topicBody;
 
     public function __construct(array $values, ContainerInterface $services)
     {
         parent::__construct($values, $services);
         $this->category = trim((string)($values[self::FIELD_CATEGORY] ?? ''));
+        $this->tags = array_values(array_filter(array_map('trim', explode(',', (string)($values[self::FIELD_TAGS] ?? ''))), 'strlen'));
+        $this->topicBody = trim((string)($values[self::FIELD_TOPIC_BODY] ?? ''));
     }
 
     public function getCategory(): string
     {
         return $this->category;
+    }
+
+    /** @return list<string> */
+    public function getTags(): array
+    {
+        return $this->tags;
+    }
+
+    public function getTopicBody(): string
+    {
+        return $this->topicBody;
     }
 
     public function requiresTagBeforeFormatting()
@@ -92,9 +110,11 @@ class DiscourseField extends BazarField
         $user = $this->getService(AuthenticationService::class)->getLoggedUser();
 
         try {
-            return $api->createTopic(
+            $topic = $api->createTopic(
                 $title,
-                _t('DISCOURSE_TOPIC_BODY', ['title' => str_replace(['[', ']'], '', $title), 'url' => $url]),
+                $this->topicBody === ''
+                    ? _t('DISCOURSE_TOPIC_BODY', ['title' => str_replace(['[', ']'], '', $title), 'url' => $url])
+                    : $this->fillTopicBody($entry, $title, $url),
                 $this->category,
                 is_array($user) ? (string)($user['name'] ?? '') : ''
             );
@@ -106,6 +126,36 @@ class DiscourseField extends BazarField
 
             return $none;
         }
+
+        if ($this->tags !== []) {
+            try {
+                $api->tagTopic($topic['topicId'], $this->tags);
+            } catch (\Throwable $e) {
+                $this->getService(Journal::class)->error("discourse: no tags on the topic of entry $tag: " . $e->getMessage(), ['exception' => $e]);
+                $this->getService(FlashMessageService::class)->setMessage(_t('DISCOURSE_TAGS_FAILED', ['error' => $e->getMessage()]));
+            }
+        }
+
+        return $topic;
+    }
+
+    /**
+     * The form's topic body with {{title}}, {{url}} and each {{field}} replaced by the entry's value, '' when it has none.
+     *
+     * @param array<string, mixed> $entry
+     */
+    protected function fillTopicBody(array $entry, string $title, string $url): string
+    {
+        $values = ['title' => $title, 'url' => $url];
+
+        return trim((string)preg_replace_callback('#{{\s*([^{}]+?)\s*}}#', static function (array $match) use ($entry, $values): string {
+            $value = $values[$match[1]] ?? $entry[$match[1]] ?? '';
+            if (is_array($value)) {
+                return implode(', ', array_filter($value, 'is_scalar'));
+            }
+
+            return is_scalar($value) ? (string)$value : '';
+        }, $this->topicBody));
     }
 
     protected function renderInput($entry)

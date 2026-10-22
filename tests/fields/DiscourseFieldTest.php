@@ -17,6 +17,7 @@ use YesWiki\Discourse\Field\DiscourseField;
 use YesWiki\Discourse\Service\DiscourseApiService;
 use YesWiki\Identity\Service\AuthenticationService;
 use YesWiki\Kernel\Service\FlashMessageService;
+use YesWiki\Kernel\Service\UrlFormatter;
 use YesWiki\Test\Core\YesWikiTestCase;
 
 require_once 'tests/YesWikiTestCase.php';
@@ -25,6 +26,10 @@ require_once 'tests/YesWikiTestCase.php';
 class DiscourseFieldTest extends YesWikiTestCase
 {
     private int $posts = 0;
+    /** @var array<string, mixed> */
+    private array $posted = [];
+    /** @var list<string>|null */
+    private ?array $tagged = null;
     private string $formId = '';
     private string $entryTag = '';
 
@@ -50,13 +55,22 @@ class DiscourseFieldTest extends YesWikiTestCase
         parent::tearDown();
     }
 
-    /** @param list<MockResponse> $responses */
-    private function field(array $responses, bool $configured = true): DiscourseField
+    /**
+     * @param list<MockResponse> $responses
+     * @param array<int, string> $settings  template values by index
+     */
+    private function field(array $responses, bool $configured = true, array $settings = []): DiscourseField
     {
         $this->posts = 0;
-        $client = new MockHttpClient(function (string $method) use (&$responses): MockResponse {
+        $this->posted = [];
+        $this->tagged = null;
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$responses): MockResponse {
             if ($method === 'POST') {
                 $this->posts++;
+                $this->posted = json_decode((string)($options['body'] ?? ''), true) ?: [];
+            }
+            if ($method === 'PUT') {
+                $this->tagged = json_decode((string)($options['body'] ?? ''), true)['tags'] ?? [];
             }
 
             return array_shift($responses) ?? new MockResponse('', ['http_code' => 500]);
@@ -86,6 +100,9 @@ class DiscourseFieldTest extends YesWikiTestCase
         $values[1] = 'bf_discourse';
         $values[2] = 'Forum';
         $values[6] = '5';
+        foreach ($settings as $index => $value) {
+            $values[$index] = $value;
+        }
 
         return new DiscourseField($values, $services);
     }
@@ -125,6 +142,59 @@ class DiscourseFieldTest extends YesWikiTestCase
         ], '', true, null, PageType::ENTRY);
 
         return $this->entryTag;
+    }
+
+    public function testTheFormDesignerKeysTagsAndTopicBodyReachTheField(): void
+    {
+        $map = $this->getWiki()->services->get(FieldFactory::class)->getAttributeKeyToIndexMap('discourse');
+
+        $this->assertSame(7, $map['tags'] ?? null);
+        $this->assertSame(13, $map['topic_body'] ?? null);
+    }
+
+    public function testTheTopicGetsTheFormsTags(): void
+    {
+        $saved = $this->field([$this->topicCreated(), new MockResponse('{}')], true, [7 => ' atelier, vélo ,,'])->formatValuesBeforeSave([
+            'tag' => 'DiscourseFieldTestUnsavedEntry',
+            'title' => 'Atelier vélo du samedi',
+        ]);
+
+        $this->assertSame('42', $saved['bf_discourse']['topicId']);
+        $this->assertSame(['atelier', 'vélo'], $this->tagged);
+    }
+
+    public function testRefusedTagsStillLeaveTheEntryItsTopicAndSayWhy(): void
+    {
+        $saved = $this->field([$this->topicCreated(), new MockResponse('{"errors":["You cannot create tags"]}', ['http_code' => 403])], true, [7 => 'nouvelle'])
+            ->formatValuesBeforeSave(['tag' => 'DiscourseFieldTestUnsavedEntry', 'title' => 'Atelier vélo du samedi']);
+
+        $this->assertSame('42', $saved['bf_discourse']['topicId']);
+        $this->assertStringContainsString('You cannot create tags', $this->getWiki()->services->get(FlashMessageService::class)->getMessage());
+    }
+
+    public function testTheFirstPostFollowsTheFormsTopicBody(): void
+    {
+        $this->field([$this->topicCreated()], true, [13 => "## {{title}}\nLieu : {{bf_lieu}}, {{bf_jours}}\n{{url}} {{bf_absent}}"])->formatValuesBeforeSave([
+            'tag' => 'DiscourseFieldTestUnsavedEntry',
+            'title' => 'Atelier vélo du samedi',
+            'bf_lieu' => 'la Gare',
+            'bf_jours' => ['samedi', 'dimanche'],
+        ]);
+
+        $url = $this->getWiki()->services->get(UrlFormatter::class)->href('', 'DiscourseFieldTestUnsavedEntry', null, false);
+        $this->assertSame("## Atelier vélo du samedi\nLieu : la Gare, samedi, dimanche\n$url", $this->posted['raw'] ?? null);
+    }
+
+    public function testWithoutTopicBodyTheFirstPostLinksToTheEntry(): void
+    {
+        $this->field([$this->topicCreated()])->formatValuesBeforeSave([
+            'tag' => 'DiscourseFieldTestUnsavedEntry',
+            'title' => 'Atelier [vélo]',
+        ]);
+
+        $url = $this->getWiki()->services->get(UrlFormatter::class)->href('', 'DiscourseFieldTestUnsavedEntry', null, false);
+        $this->assertSame(_t('DISCOURSE_TOPIC_BODY', ['title' => 'Atelier vélo', 'url' => $url]), $this->posted['raw'] ?? null);
+        $this->assertNull($this->tagged);
     }
 
     public function testUpdatingAnEntryKeepsItsTopicAndPostsNothing(): void

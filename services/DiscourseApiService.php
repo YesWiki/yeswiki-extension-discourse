@@ -62,6 +62,27 @@ class DiscourseApiService
     }
 
     /**
+     * Sets a topic's tags as the configured api_username, whose rights do not depend on the topic's author.
+     *
+     * @param list<string> $tags
+     *
+     * @throws \RuntimeException with Discourse's own error message when the tags are refused
+     */
+    public function tagTopic(string $topicId, array $tags): void
+    {
+        $response = $this->client->request('PUT', $this->baseUrl() . '/t/-/' . (int)$topicId . '.json', [
+            'headers' => $this->headers($this->config('api_username') !== '' ? $this->config('api_username') : 'system'),
+            'json' => ['tags' => $tags],
+        ]);
+        $status = $response->getStatusCode();
+        if ($status < 200 || $status >= 300) {
+            $data = json_decode($response->getContent(false), true);
+            $errors = is_array($data['errors'] ?? null) ? implode(' ', $data['errors']) : '';
+            throw new \RuntimeException($errors !== '' ? $errors : "Discourse answered HTTP $status");
+        }
+    }
+
+    /**
      * A topic's counts, and its posts per day counted back from now, read off timeline_lookup.
      *
      * @return array{posts: int, replies: int, views: int, likes: int, participants: int, lastPostedAt: string, postsByDaysAgo: array<int, int>}
@@ -128,6 +149,35 @@ class DiscourseApiService
         }
 
         return $categories;
+    }
+
+    /**
+     * The names of the forum's tags.
+     *
+     * @return list<string>
+     *
+     * @throws \RuntimeException when Discourse does not answer with its tags
+     */
+    public function tags(): array
+    {
+        $response = $this->client->request('GET', $this->baseUrl() . '/tags.json', [
+            'headers' => $this->headers($this->config('api_username') !== '' ? $this->config('api_username') : 'system'),
+        ]);
+        $status = $response->getStatusCode();
+        $data = json_decode($response->getContent(false), true);
+        if ($status !== 200 || !is_array($data['tags'] ?? null)) {
+            throw new \RuntimeException("Discourse answered HTTP $status for its tags");
+        }
+
+        $tags = [];
+        foreach ($data['tags'] as $tag) {
+            $name = is_array($tag) ? ($tag['name'] ?? $tag['text'] ?? null) : null;
+            if (is_string($name) && $name !== '') {
+                $tags[] = $name;
+            }
+        }
+
+        return $tags;
     }
 
     /**

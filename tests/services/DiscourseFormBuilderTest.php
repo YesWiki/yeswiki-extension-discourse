@@ -48,25 +48,28 @@ class DiscourseFormBuilderTest extends YesWikiTestCase
         $this->assertArrayHasKey('discourse', $designer['data']);
     }
 
-    public function testTheForumsCategoriesAreOffered(): void
+    public function testTheForumsCategoriesAndTagsAreOffered(): void
     {
-        $data = $this->builder([new MockResponse(json_encode(['categories' => [['id' => 5, 'name' => 'CARe']]]))])->formBuilderData();
+        $data = $this->builder([
+            new MockResponse(json_encode(['categories' => [['id' => 5, 'name' => 'CARe']]])),
+            new MockResponse(json_encode(['tags' => [['id' => 1, 'name' => 'team']]])),
+        ])->formBuilderData();
 
-        $this->assertSame(['discourse' => ['configured' => true, 'categories' => ['5' => 'CARe']]], $data);
+        $this->assertSame(['discourse' => ['configured' => true, 'categories' => ['5' => 'CARe'], 'tags' => ['team']]], $data);
     }
 
     public function testAForumThatDoesNotAnswerLeavesTheCategoryToType(): void
     {
-        $data = $this->builder([new MockResponse('', ['http_code' => 502])])->formBuilderData();
+        $data = $this->builder([new MockResponse('', ['http_code' => 502]), new MockResponse('', ['http_code' => 502])])->formBuilderData();
 
-        $this->assertSame(['discourse' => ['configured' => true, 'categories' => []]], $data);
+        $this->assertSame(['discourse' => ['configured' => true, 'categories' => [], 'tags' => []]], $data);
     }
 
     public function testAWikiWithoutApiSettingsAsksNothingOfTheForum(): void
     {
         $data = $this->builder([], false)->formBuilderData();
 
-        $this->assertSame(['discourse' => ['configured' => false, 'categories' => []]], $data);
+        $this->assertSame(['discourse' => ['configured' => false, 'categories' => [], 'tags' => []]], $data);
         $this->assertSame(0, $this->requests);
     }
 }
