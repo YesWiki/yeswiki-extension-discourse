@@ -95,6 +95,42 @@ class DiscourseApiService
     }
 
     /**
+     * The forum's categories, by id, a subcategory named after its parent.
+     *
+     * @return array<string, string>
+     *
+     * @throws \RuntimeException when Discourse does not answer with its categories
+     */
+    public function categories(): array
+    {
+        $response = $this->client->request('GET', $this->baseUrl() . '/site.json', [
+            'headers' => $this->headers($this->config('api_username') !== '' ? $this->config('api_username') : 'system'),
+        ]);
+        $status = $response->getStatusCode();
+        $data = json_decode($response->getContent(false), true);
+        if ($status !== 200 || !is_array($data['categories'] ?? null)) {
+            throw new \RuntimeException("Discourse answered HTTP $status for its categories");
+        }
+
+        $names = [];
+        $parents = [];
+        foreach ($data['categories'] as $category) {
+            if (is_array($category) && is_int($category['id'] ?? null) && is_string($category['name'] ?? null)) {
+                $names[$category['id']] = $category['name'];
+                $parents[$category['id']] = is_int($category['parent_category_id'] ?? null) ? $category['parent_category_id'] : null;
+            }
+        }
+
+        $categories = [];
+        foreach ($names as $id => $name) {
+            $parent = $parents[$id];
+            $categories[(string)$id] = $parent !== null && isset($names[$parent]) ? $names[$parent] . ' › ' . $name : $name;
+        }
+
+        return $categories;
+    }
+
+    /**
      * Discourse emits [index, days_ago] each time the age changes, so a day holds the posts up to the next index.
      *
      * @param array<mixed> $lookup

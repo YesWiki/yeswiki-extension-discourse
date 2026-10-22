@@ -119,4 +119,23 @@ class DiscourseApiServiceTest extends YesWikiTestCase
             $this->assertNotInstanceOf(TopicRefusedException::class, $e);
         }
     }
+
+    public function testCategoriesComeFromTheSiteWithTheirParentsName(): void
+    {
+        $categories = $this->service([new MockResponse(json_encode(['categories' => [
+            ['id' => 4, 'name' => 'Général'],
+            ['id' => 5, 'name' => 'Parcours', 'parent_category_id' => 4],
+            ['id' => 'x', 'name' => 'Cassée'],
+        ]]))])->categories();
+
+        $this->assertSame(['4' => 'Général', '5' => 'Général › Parcours'], $categories);
+        $this->assertSame('https://forum.example.org/site.json', $this->sent[0]['url']);
+        $this->assertSame('wikibot', $this->header($this->sent[0]['options']['headers'], 'Api-Username'));
+    }
+
+    public function testCategoriesThrowWhenTheForumDoesNotAnswer(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->service([new MockResponse('', ['http_code' => 502])])->categories();
+    }
 }

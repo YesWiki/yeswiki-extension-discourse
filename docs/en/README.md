@@ -119,18 +119,22 @@ forum's address and the key to `yeswiki.config.php`, next to `sso_secret`:
 
 ### In a form
 
-The field takes an optional `category`, the number of a Discourse category.
-It is the last number in the category's address: `/c/ateliers/5` is `5`.
-Without it, topics land in Discourse's default category.
+In the form designer, add a "Forum discussion" block. Its settings:
+
+- **Forum category**: where the topics go, picked from the forum's list.
+  Without one, topics land in Discourse's default category. When the forum
+  does not answer, the designer asks for the category's number instead: the
+  last number in its address, `/c/ateliers/5` is `5`.
+- **Help text**: a sentence shown under the field in the entry form.
+- **Read and write access**, under the advanced settings: who sees the forum
+  button, and whose saves may open a topic.
+
+The field has no default value and cannot be required: the topic only exists
+once the entry is saved. In the form's wiki code it reads:
 
 ```json
 { "type": "discourse", "name": "bf_discourse", "label": "Forum", "category": "5" }
 ```
-
-The form designer has no block for this field yet. Add it in the form's
-"Wiki code (to copy-paste)" tab by pasting the line above into the list of
-fields. The designer then shows it as a custom field and keeps it as it is
-when the form is saved again.
 
 ### Topic activity
 

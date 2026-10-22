@@ -124,20 +124,26 @@ forum et la clé dans `yeswiki.config.php`, à côté de `sso_secret` :
 
 ### Dans un formulaire
 
-Le champ accepte une `category` facultative, le numéro d'une catégorie
-Discourse. C'est le dernier nombre de l'adresse de la catégorie :
-`/c/ateliers/5` donne `5`. Sans elle, les sujets vont dans la catégorie par
-défaut de Discourse.
+Dans le constructeur de formulaire, ajoutez un bloc « Discussion sur le
+forum ». Ses réglages :
+
+- **Catégorie du forum** : là où vont les sujets, à choisir dans la liste du
+  forum. Sans catégorie, les sujets vont dans la catégorie par défaut de
+  Discourse. Quand le forum ne répond pas, le constructeur demande plutôt le
+  numéro de la catégorie : le dernier nombre de son adresse, `/c/ateliers/5`
+  donne `5`.
+- **Texte d'aide** : une phrase affichée sous le champ dans le formulaire de
+  saisie.
+- **Droits de lecture et d'écriture**, dans les paramètres avancés : qui voit le
+  bouton du forum, et qui peut ouvrir un sujet en enregistrant la fiche.
+
+Le champ n'a pas de valeur par défaut et ne peut pas être obligatoire : le
+sujet n'existe qu'une fois la fiche enregistrée. Dans le code wiki du
+formulaire, il s'écrit :
 
 ```json
 { "type": "discourse", "name": "bf_discourse", "label": "Forum", "category": "5" }
 ```
-
-Le constructeur de formulaire n'a pas encore de bloc pour ce champ. Ajoutez-le
-dans l'onglet « Code Wiki (pour faire des copier-coller) » du formulaire, en
-collant la ligne ci-dessus dans la liste des champs. Le constructeur l'affiche
-ensuite comme un champ personnalisé et le garde tel quel quand le formulaire
-est enregistré à nouveau.
 
 ### Activité du sujet
 
