@@ -158,30 +158,26 @@ weeks are an estimate.
 ### In cards
 
 The extension adds a card presentation, "Cards with forum activity". It is
-the standard card plus the replies and bars at the bottom of each card. It
-needs `dynamic="true"`:
+the standard card plus the replies and bars at the bottom of each card:
 
 ```
-{{entrylist id="12" template="discourse-card" dynamic="true"}}
+{{entrylist id="12" template="discourse-card"}}
 ```
 
 Each card asks for its activity only when it scrolls into view. A card whose
 entry has no topic stays as it is.
 
-For a card template of your own, put the element where the activity should
+For a list template of your own, put the element where the activity should
 go, and load its script once:
 
 ```twig
 {{ include_javascript('extensions/discourse/javascripts/discourse-activity.js', false, true) }}
-<discourse-activity entry="{{ entry.id_fiche }}"></discourse-activity>
+<discourse-activity entry="{{ item.entry.tag }}"></discourse-activity>
 ```
 
-In a dynamic (Vue) template, write `:entry="entry.tag"` instead. The element
-calls `/?api/discourse/entries/<entry>/activity`, which answers only if the
-reader may read the entry and the field.
-
-The server-side card (`template="card"` without `dynamic`) cannot show it: it
-only knows text slots.
+In an entry template, write `entry="{{ entry.id_fiche }}"`. The element calls
+`/?api/discourse/entries/<entry>/activity`, which answers only if the reader
+may read the entry and the field.
 
 ### When the forum refuses the topic
 

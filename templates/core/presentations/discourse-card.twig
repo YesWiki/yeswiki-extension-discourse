@@ -1,0 +1,12 @@
+{# presentation
+   label: DISCOURSE_PRESENTATION_CARD
+   category: card
+#}
+{# The core cards, each with the forum activity of its entry under it, loaded once the card scrolls into view. #}
+{% extends "@core/presentations/card.twig" %}
+
+{% block item_footer %}
+  {{ parent() }}
+  {{ include_javascript('extensions/discourse/javascripts/discourse-activity.js', false, true) }}
+  <discourse-activity class="discourse-activity-area" entry="{{ item.entry.tag|default(item.id) }}"></discourse-activity>
+{% endblock %}

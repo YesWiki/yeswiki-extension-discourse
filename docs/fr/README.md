@@ -169,29 +169,26 @@ au-delà de 300 messages dans un sujet, les semaines sont une estimation.
 
 L'extension ajoute une présentation en cartes, « Cartes avec l'activité du
 forum ». C'est la carte standard, avec les réponses et les barres en bas de
-chaque carte. Elle demande `dynamic="true"` :
+chaque carte :
 
 ```
-{{entrylist id="12" template="discourse-card" dynamic="true"}}
+{{entrylist id="12" template="discourse-card"}}
 ```
 
 Chaque carte ne demande son activité qu'au moment où elle apparaît à l'écran.
 Une carte dont la fiche n'a pas de sujet reste telle quelle.
 
-Pour un modèle de carte à vous, placez l'élément là où l'activité doit
+Pour un modèle de liste à vous, placez l'élément là où l'activité doit
 s'afficher, et chargez son script une fois :
 
 ```twig
 {{ include_javascript('extensions/discourse/javascripts/discourse-activity.js', false, true) }}
-<discourse-activity entry="{{ entry.id_fiche }}"></discourse-activity>
+<discourse-activity entry="{{ item.entry.tag }}"></discourse-activity>
 ```
 
-Dans un modèle dynamique (Vue), écrivez plutôt `:entry="entry.tag"`.
-L'élément appelle `/?api/discourse/entries/<fiche>/activity`, qui ne répond
-que si la personne peut lire la fiche et le champ.
-
-La carte côté serveur (`template="card"` sans `dynamic`) ne peut pas
-l'afficher : elle ne connaît que des emplacements de texte.
+Dans un modèle de fiche, écrivez `entry="{{ entry.id_fiche }}"`. L'élément
+appelle `/?api/discourse/entries/<fiche>/activity`, qui ne répond que si la
+personne peut lire la fiche et le champ.
 
 ### Quand le forum refuse le sujet
 
