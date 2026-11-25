@@ -14,4 +14,8 @@ return [
     'DISCOURSE_FORM_BUILDER_TAGS_EXISTING' => 'Séparées par des virgules. Déjà sur le forum : %{tags}',
     'DISCOURSE_FORM_BUILDER_TOPIC_BODY' => 'Premier message du sujet',
     'DISCOURSE_FORM_BUILDER_TOPIC_BODY_HINT' => 'En markdown. {{title}} donne le titre de la fiche, {{url}} son adresse, et {{bf_…}} la valeur d\'un champ. Vide, le message renvoie simplement vers la fiche.',
+    'DISCOURSE_FORM_BUILDER_CATEGORY_PER_ENTRY' => 'Ce que chaque fiche ouvre sur le forum',
+    'DISCOURSE_FORM_BUILDER_TOPIC_PER_ENTRY_OPTION' => 'Un sujet dans la catégorie du forum',
+    'DISCOURSE_FORM_BUILDER_CATEGORY_PER_ENTRY_OPTION' => 'Une rubrique dans la catégorie du forum, avec un premier sujet',
+    'DISCOURSE_FORM_BUILDER_CATEGORY_PER_ENTRY_HINT' => 'Une rubrique porte le titre de la fiche. Elle est créée par le compte api_username, qui doit être administrateur du forum. Les fiches qui ont déjà un sujet le gardent.',
 ];

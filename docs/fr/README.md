@@ -132,6 +132,9 @@ forum ». Ses réglages :
   Discourse. Quand le forum ne répond pas, le constructeur demande plutôt le
   numéro de la catégorie : le dernier nombre de son adresse, `/c/ateliers/5`
   donne `5`.
+- **Ce que chaque fiche ouvre sur le forum** : un sujet dans la catégorie (le
+  choix par défaut), ou une rubrique dans la catégorie avec un premier sujet
+  dedans. Voir [Une rubrique par fiche](#une-rubrique-par-fiche).
 - **Étiquettes des sujets** : séparées par des virgules, posées sur chaque
   sujet par le compte `api_username`, qui crée celles qui manquent s'il en a le
   droit. Si le forum les refuse, la fiche garde son sujet, sans étiquettes, et
@@ -164,6 +167,32 @@ une fois par sujet et garde la réponse 15 minutes dans `cache/discourse/`.
 Les semaines sont comptées d'après la chronologie de Discourse. Les notes de
 modération comme « fermé » ou « épinglé » comptent comme des messages, et
 au-delà de 300 messages dans un sujet, les semaines sont une estimation.
+
+### Une rubrique par fiche
+
+Avec ce choix, enregistrer une fiche crée d'abord une rubrique qui porte son
+titre (50 caractères au plus), sous la catégorie du formulaire, avec ses
+couleurs. Le premier sujet de la fiche est ouvert dans cette rubrique. Le
+bouton « Discuter sur le forum » mène à la rubrique.
+
+La rubrique est créée par le compte `api_username`, qui doit être
+administrateur du forum. Discourse limite l'imbrication : la catégorie du
+formulaire doit être au premier niveau, sauf si `max_category_nesting` vaut 3.
+
+L'activité de la fiche devient celle de la rubrique : le nombre de sujets, et
+les barres additionnent les messages des sujets actifs ces douze dernières
+semaines (30 sujets au plus). `/?api/discourse/entries/<fiche>/topics` donne la
+liste des derniers sujets de la rubrique, en HTML, pour un onglet de fiche par
+exemple :
+
+```twig
+<div hx-get="{{ url({tag: 'api/discourse/entries/' ~ entry.id_fiche ~ '/topics'}) }}" hx-trigger="load"></div>
+```
+
+Une fiche qui avait déjà un sujet avant ce choix le garde, sans rubrique. Si
+le forum refuse la rubrique, par exemple parce qu'une autre porte déjà ce nom,
+la fiche n'est pas enregistrée. S'il refuse le premier sujet, la rubrique qui
+vient d'être créée est supprimée et la fiche n'est pas enregistrée non plus.
 
 ### Dans des cartes
 

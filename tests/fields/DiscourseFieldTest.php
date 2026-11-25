@@ -127,11 +127,11 @@ class DiscourseFieldTest extends YesWikiTestCase
             'title' => 'Atelier vélo du samedi',
         ]);
 
-        $this->assertSame(['bf_discourse' => ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/atelier-velo/42']], $saved);
+        $this->assertSame(['bf_discourse' => ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/atelier-velo/42', 'categoryId' => '', 'categoryUrl' => '']], $saved);
         $this->assertSame(1, $this->posts);
     }
 
-    /** @param array{topicId: string, topicUrl: string} $topic */
+    /** @param array<string, string> $topic */
     private function savedEntry(array $topic): string
     {
         $this->getWiki()->services->get(AuthenticationService::class)->connectFirstAdmin();
@@ -199,11 +199,11 @@ class DiscourseFieldTest extends YesWikiTestCase
 
     public function testUpdatingAnEntryKeepsItsTopicAndPostsNothing(): void
     {
-        $topic = ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/atelier-velo/42'];
+        $topic = ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/atelier-velo/42', 'categoryId' => '', 'categoryUrl' => ''];
         $saved = $this->field([$this->topicCreated()])->formatValuesBeforeSave([
             'tag' => $this->savedEntry($topic),
             'title' => 'Atelier vélo du samedi',
-            'bf_discourse' => ['topicId' => '', 'topicUrl' => ''],
+            'bf_discourse' => ['topicId' => '', 'topicUrl' => '', 'categoryId' => '', 'categoryUrl' => ''],
         ]);
 
         $this->assertSame(['bf_discourse' => $topic], $saved);
@@ -212,19 +212,19 @@ class DiscourseFieldTest extends YesWikiTestCase
 
     public function testUpdatingAnEntryWithoutTopicOpensOne(): void
     {
-        $tag = $this->savedEntry(['topicId' => '', 'topicUrl' => '']);
+        $tag = $this->savedEntry(['topicId' => '', 'topicUrl' => '', 'categoryId' => '', 'categoryUrl' => '']);
         $saved = $this->field([new MockResponse('', ['http_code' => 404]), $this->topicCreated()])->formatValuesBeforeSave([
             'tag' => $tag,
             'title' => 'Atelier vélo du samedi',
         ]);
 
-        $this->assertSame(['bf_discourse' => ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/atelier-velo/42']], $saved);
+        $this->assertSame(['bf_discourse' => ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/atelier-velo/42', 'categoryId' => '', 'categoryUrl' => '']], $saved);
         $this->assertSame(1, $this->posts);
     }
 
     public function testTheEditFormOfAnEntryWithoutTopicSaysSavingWillOpenOne(): void
     {
-        $html = $this->field([])->renderInputIfPermitted(['tag' => 'DiscourseFieldTestSavedEntry', 'bf_discourse' => ['topicId' => '', 'topicUrl' => '']]);
+        $html = $this->field([])->renderInputIfPermitted(['tag' => 'DiscourseFieldTestSavedEntry', 'bf_discourse' => ['topicId' => '', 'topicUrl' => '', 'categoryId' => '', 'categoryUrl' => '']]);
 
         $this->assertStringContainsString(_t('DISCOURSE_FIELD_WILL_CREATE'), $html);
     }
@@ -237,7 +237,7 @@ class DiscourseFieldTest extends YesWikiTestCase
             'title' => 'Atelier vélo du samedi',
         ]));
 
-        $this->assertSame(['bf_discourse' => ['topicId' => '', 'topicUrl' => '']], $saved);
+        $this->assertSame(['bf_discourse' => ['topicId' => '', 'topicUrl' => '', 'categoryId' => '', 'categoryUrl' => '']], $saved);
         $this->assertSame(0, $this->posts);
     }
 
@@ -255,7 +255,7 @@ class DiscourseFieldTest extends YesWikiTestCase
         $saved = $this->field([new MockResponse('', ['http_code' => 502])])
             ->formatValuesBeforeSave(['tag' => 'DiscourseFieldTestUnsavedEntry', 'title' => 'Atelier vélo du samedi']);
 
-        $this->assertSame(['bf_discourse' => ['topicId' => '', 'topicUrl' => '']], $saved);
+        $this->assertSame(['bf_discourse' => ['topicId' => '', 'topicUrl' => '', 'categoryId' => '', 'categoryUrl' => '']], $saved);
         $this->assertStringContainsString('HTTP 502', $this->getWiki()->services->get(FlashMessageService::class)->getMessage());
     }
 
@@ -263,7 +263,7 @@ class DiscourseFieldTest extends YesWikiTestCase
     {
         $saved = $this->field([], false)->formatValuesBeforeSave(['tag' => 'DiscourseFieldTestUnsavedEntry', 'title' => 'Atelier']);
 
-        $this->assertSame(['bf_discourse' => ['topicId' => '', 'topicUrl' => '']], $saved);
+        $this->assertSame(['bf_discourse' => ['topicId' => '', 'topicUrl' => '', 'categoryId' => '', 'categoryUrl' => '']], $saved);
         $this->assertSame(_t('DISCOURSE_API_NOT_CONFIGURED'), $this->getWiki()->services->get(FlashMessageService::class)->getMessage());
     }
 
@@ -309,7 +309,83 @@ class DiscourseFieldTest extends YesWikiTestCase
         $this->entryTag = (string)$entry['tag'];
 
         $this->assertNotSame('', $this->entryTag);
-        $this->assertSame(['topicId' => '', 'topicUrl' => ''], $entry['bf_discourse']);
+        $this->assertSame(['topicId' => '', 'topicUrl' => '', 'categoryId' => '', 'categoryUrl' => ''], $entry['bf_discourse']);
         $this->assertSame(_t('DISCOURSE_API_NOT_CONFIGURED'), $services->get(FlashMessageService::class)->getMessage());
+    }
+
+    private function categoryCreated(): MockResponse
+    {
+        return new MockResponse(json_encode(['category' => ['id' => 9, 'slug' => 'atelier-velo']]));
+    }
+
+    public function testTheFormDesignerKeyCategoryPerEntryReachesTheField(): void
+    {
+        $map = $this->getWiki()->services->get(FieldFactory::class)->getAttributeKeyToIndexMap('discourse');
+
+        $this->assertSame(14, $map['category_per_entry'] ?? null);
+        $this->assertFalse($this->field([])->opensACategoryPerEntry());
+        $this->assertTrue($this->field([], true, [14 => '1'])->opensACategoryPerEntry());
+    }
+
+    public function testACategoryPerEntryOpensTheCategoryThenItsFirstTopicInside(): void
+    {
+        $saved = $this->field([new MockResponse('{}', ['http_code' => 404]), $this->categoryCreated(), $this->topicCreated()], true, [14 => '1'])
+            ->formatValuesBeforeSave(['tag' => 'DiscourseFieldTestUnsavedEntry', 'title' => 'Atelier vélo du samedi']);
+
+        $this->assertSame(['bf_discourse' => [
+            'topicId' => '42',
+            'topicUrl' => 'https://forum.example.org/t/atelier-velo/42',
+            'categoryId' => '9',
+            'categoryUrl' => 'https://forum.example.org/c/atelier-velo/9',
+        ]], $saved);
+        $this->assertSame(2, $this->posts);
+        $this->assertSame(9, $this->posted['category'] ?? null);
+    }
+
+    public function testAnEntryWhoseCategoryHasNoTopicYetGetsOneInsideWithoutASecondCategory(): void
+    {
+        $tag = $this->savedEntry(['topicId' => '', 'topicUrl' => '', 'categoryId' => '9', 'categoryUrl' => 'https://forum.example.org/c/atelier-velo/9']);
+        $saved = $this->field([new MockResponse('', ['http_code' => 404]), $this->topicCreated()], true, [14 => '1'])->formatValuesBeforeSave(['tag' => $tag, 'title' => 'Atelier vélo du samedi']);
+
+        $this->assertSame('9', $saved['bf_discourse']['categoryId']);
+        $this->assertSame('42', $saved['bf_discourse']['topicId']);
+        $this->assertSame(1, $this->posts);
+    }
+
+    public function testAnEntryThatAlreadyHasATopicKeepsItWhenTheFormSwitchesToACategoryPerEntry(): void
+    {
+        $topic = ['topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/atelier-velo/42', 'categoryId' => '', 'categoryUrl' => ''];
+        $saved = $this->field([$this->categoryCreated()], true, [14 => '1'])->formatValuesBeforeSave(['tag' => $this->savedEntry($topic), 'title' => 'Atelier vélo du samedi']);
+
+        $this->assertSame(['bf_discourse' => $topic], $saved);
+        $this->assertSame(0, $this->posts);
+    }
+
+    public function testARefusedFirstTopicStopsTheEntryAndRemovesTheCategoryJustCreated(): void
+    {
+        $field = $this->field([
+            new MockResponse('{}', ['http_code' => 404]),
+            $this->categoryCreated(),
+            new MockResponse('{"errors":["Title is too short"]}', ['http_code' => 422]),
+            new MockResponse('{}'),
+        ], true, [14 => '1']);
+
+        try {
+            $field->formatValuesBeforeSave(['tag' => 'DiscourseFieldTestUnsavedEntry', 'title' => 'Court']);
+            $this->fail('the entry should not be saved');
+        } catch (EntryValidationException $e) {
+            $this->assertStringContainsString('Title is too short', $e->getMessage());
+        }
+        $this->assertSame(2, $this->posts);
+    }
+
+    public function testTheEntryLinksToItsCategoryRatherThanItsFirstTopic(): void
+    {
+        $html = $this->field([], false)->renderStaticIfPermitted(['bf_discourse' => [
+            'topicId' => '42', 'topicUrl' => 'https://forum.example.org/t/x/42',
+            'categoryId' => '9', 'categoryUrl' => 'https://forum.example.org/c/x/9',
+        ]]);
+
+        $this->assertStringContainsString('href="https://forum.example.org/c/x/9"', $html);
     }
 }

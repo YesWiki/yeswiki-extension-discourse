@@ -10,6 +10,8 @@ use YesWiki\Discourse\Exception\TopicRefusedException;
 /** Calls to the Discourse REST API with the admin key from discourse_connect.api_key. */
 class DiscourseApiService
 {
+    public const CATEGORY_NAME_MAX = 50;
+
     private HttpClientInterface $client;
 
     public function __construct(private readonly ParameterBagInterface $params, ?HttpClientInterface $client = null)
@@ -62,6 +64,105 @@ class DiscourseApiService
     }
 
     /**
+     * Creates a category under $parent, as the configured api_username, with the parent's colours when it can read them.
+     *
+     * @return array{categoryId: string, categoryUrl: string}
+     *
+     * @throws TopicRefusedException with Discourse's own error message when the category is refused
+     * @throws \RuntimeException     when Discourse does not answer
+     */
+    public function createCategory(string $name, string $parent): array
+    {
+        $body = ['name' => mb_substr($name, 0, self::CATEGORY_NAME_MAX), 'color' => '0088CC', 'text_color' => 'FFFFFF'];
+        if (ctype_digit($parent)) {
+            $body['parent_category_id'] = (int)$parent;
+            try {
+                $colours = $this->categoryData($parent);
+                $body['color'] = is_string($colours['color'] ?? null) && $colours['color'] !== '' ? $colours['color'] : $body['color'];
+                $body['text_color'] = is_string($colours['text_color'] ?? null) && $colours['text_color'] !== '' ? $colours['text_color'] : $body['text_color'];
+            } catch (\RuntimeException $e) {
+            }
+        }
+
+        $response = $this->client->request('POST', $this->baseUrl() . '/categories.json', [
+            'headers' => $this->headers($this->apiUsername()),
+            'json' => $body,
+        ]);
+        $status = $response->getStatusCode();
+        $data = json_decode($response->getContent(false), true);
+        $category = is_array($data['category'] ?? null) ? $data['category'] : [];
+
+        if ($status < 200 || $status >= 300 || empty($category['id'])) {
+            $errors = is_array($data['errors'] ?? null) ? implode(' ', $data['errors']) : '';
+            if ($status === 422 && $errors !== '') {
+                throw new TopicRefusedException($errors);
+            }
+            throw new \RuntimeException($errors !== '' ? $errors : "Discourse answered HTTP $status");
+        }
+
+        $slug = is_string($category['slug'] ?? null) && $category['slug'] !== '' ? $category['slug'] : '-';
+
+        return [
+            'categoryId' => (string)$category['id'],
+            'categoryUrl' => $this->baseUrl() . '/c/' . rawurlencode($slug) . '/' . (int)$category['id'],
+        ];
+    }
+
+    /** Deletes a category that holds nothing but its description topic; says nothing when Discourse refuses. */
+    public function deleteCategory(string $categoryId): void
+    {
+        try {
+            $this->client->request('DELETE', $this->baseUrl() . '/categories/' . (int)$categoryId . '.json', [
+                'headers' => $this->headers($this->apiUsername()),
+            ])->getStatusCode();
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /**
+     * A category's counts and its latest topics, without the topic that describes the category.
+     *
+     * @return array{topics: int, posts: int, latest: list<array{id: string, title: string, url: string, replies: int, lastPostedAt: string}>}
+     *
+     * @throws \RuntimeException when Discourse does not answer with the category
+     */
+    public function category(string $categoryId): array
+    {
+        $category = $this->categoryData($categoryId);
+        $about = preg_match('#/(\d+)$#', (string)($category['topic_url'] ?? ''), $match) === 1 ? $match[1] : '';
+
+        $response = $this->client->request('GET', $this->baseUrl() . '/latest.json?category=' . (int)$categoryId, [
+            'headers' => $this->headers($this->apiUsername()),
+        ]);
+        $status = $response->getStatusCode();
+        $data = json_decode($response->getContent(false), true);
+        if ($status !== 200 || !is_array($data['topic_list']['topics'] ?? null)) {
+            throw new \RuntimeException("Discourse answered HTTP $status for the topics of category $categoryId");
+        }
+
+        $latest = [];
+        foreach ($data['topic_list']['topics'] as $topic) {
+            if (!is_array($topic) || (int)($topic['category_id'] ?? 0) !== (int)$categoryId || empty($topic['id']) || (string)$topic['id'] === $about) {
+                continue;
+            }
+            $slug = is_string($topic['slug'] ?? null) && $topic['slug'] !== '' ? $topic['slug'] : 'topic';
+            $latest[] = [
+                'id' => (string)$topic['id'],
+                'title' => is_string($topic['title'] ?? null) ? $topic['title'] : '',
+                'url' => $this->baseUrl() . '/t/' . rawurlencode($slug) . '/' . (int)$topic['id'],
+                'replies' => max(0, (int)($topic['posts_count'] ?? 1) - 1),
+                'lastPostedAt' => is_string($topic['last_posted_at'] ?? null) ? $topic['last_posted_at'] : '',
+            ];
+        }
+
+        return [
+            'topics' => (int)($category['topic_count'] ?? count($latest)),
+            'posts' => (int)($category['post_count'] ?? 0),
+            'latest' => $latest,
+        ];
+    }
+
+    /**
      * Sets a topic's tags as the configured api_username, whose rights do not depend on the topic's author.
      *
      * @param list<string> $tags
@@ -71,7 +172,7 @@ class DiscourseApiService
     public function tagTopic(string $topicId, array $tags): void
     {
         $response = $this->client->request('PUT', $this->baseUrl() . '/t/-/' . (int)$topicId . '.json', [
-            'headers' => $this->headers($this->config('api_username') !== '' ? $this->config('api_username') : 'system'),
+            'headers' => $this->headers($this->apiUsername()),
             'json' => ['tags' => $tags],
         ]);
         $status = $response->getStatusCode();
@@ -92,7 +193,7 @@ class DiscourseApiService
     public function topic(string $topicId): array
     {
         $response = $this->client->request('GET', $this->baseUrl() . '/t/' . (int)$topicId . '.json', [
-            'headers' => $this->headers($this->config('api_username') !== '' ? $this->config('api_username') : 'system'),
+            'headers' => $this->headers($this->apiUsername()),
         ]);
         $status = $response->getStatusCode();
         $data = json_decode($response->getContent(false), true);
@@ -125,7 +226,7 @@ class DiscourseApiService
     public function categories(): array
     {
         $response = $this->client->request('GET', $this->baseUrl() . '/site.json', [
-            'headers' => $this->headers($this->config('api_username') !== '' ? $this->config('api_username') : 'system'),
+            'headers' => $this->headers($this->apiUsername()),
         ]);
         $status = $response->getStatusCode();
         $data = json_decode($response->getContent(false), true);
@@ -161,7 +262,7 @@ class DiscourseApiService
     public function tags(): array
     {
         $response = $this->client->request('GET', $this->baseUrl() . '/tags.json', [
-            'headers' => $this->headers($this->config('api_username') !== '' ? $this->config('api_username') : 'system'),
+            'headers' => $this->headers($this->apiUsername()),
         ]);
         $status = $response->getStatusCode();
         $data = json_decode($response->getContent(false), true);
@@ -207,7 +308,7 @@ class DiscourseApiService
     /** The Discourse username whose external_id is $wikiUserName, or the configured api_username. */
     public function authorFor(string $wikiUserName): string
     {
-        $fallback = $this->config('api_username') !== '' ? $this->config('api_username') : 'system';
+        $fallback = $this->apiUsername();
         if ($wikiUserName === '') {
             return $fallback;
         }
@@ -228,6 +329,26 @@ class DiscourseApiService
         } catch (\Throwable $e) {
             return $fallback;
         }
+    }
+
+    /** @return array<string, mixed> the category as /c/{id}/show.json gives it */
+    private function categoryData(string $categoryId): array
+    {
+        $response = $this->client->request('GET', $this->baseUrl() . '/c/' . (int)$categoryId . '/show.json', [
+            'headers' => $this->headers($this->apiUsername()),
+        ]);
+        $status = $response->getStatusCode();
+        $data = json_decode($response->getContent(false), true);
+        if ($status !== 200 || !is_array($data['category'] ?? null)) {
+            throw new \RuntimeException("Discourse answered HTTP $status for category $categoryId");
+        }
+
+        return $data['category'];
+    }
+
+    private function apiUsername(): string
+    {
+        return $this->config('api_username') !== '' ? $this->config('api_username') : 'system';
     }
 
     /** @return array<string, string> */

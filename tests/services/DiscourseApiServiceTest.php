@@ -162,4 +162,55 @@ class DiscourseApiServiceTest extends YesWikiTestCase
         $this->expectException(\RuntimeException::class);
         $this->service([new MockResponse('', ['http_code' => 502])])->categories();
     }
+
+    public function testACategoryIsCreatedUnderItsParentWithTheParentsColours(): void
+    {
+        $category = $this->service([
+            new MockResponse(json_encode(['category' => ['id' => 4, 'color' => '25AAE2', 'text_color' => 'FFFFFF']])),
+            new MockResponse(json_encode(['category' => ['id' => 9, 'slug' => 'atelier-velo']])),
+        ])->createCategory(str_repeat('Atelier vélo ', 5), '4');
+
+        $this->assertSame(['categoryId' => '9', 'categoryUrl' => 'https://forum.example.org/c/atelier-velo/9'], $category);
+        $this->assertSame('https://forum.example.org/c/4/show.json', $this->sent[0]['url']);
+        $post = $this->sent[1];
+        $this->assertSame('https://forum.example.org/categories.json', $post['url']);
+        $this->assertSame('wikibot', $this->header($post['options']['headers'], 'Api-Username'));
+        $body = json_decode($post['options']['body'], true);
+        $this->assertSame(4, $body['parent_category_id']);
+        $this->assertSame('25AAE2', $body['color']);
+        $this->assertSame(DiscourseApiService::CATEGORY_NAME_MAX, mb_strlen($body['name']));
+    }
+
+    public function testARefusedCategorySaysWhy(): void
+    {
+        $this->expectException(TopicRefusedException::class);
+        $this->expectExceptionMessage('Category Name has already been taken');
+        $this->service([
+            new MockResponse('{}', ['http_code' => 404]),
+            new MockResponse('{"errors":["Category Name has already been taken"]}', ['http_code' => 422]),
+        ])->createCategory('Atelier vélo', '4');
+    }
+
+    public function testACategoryListsItsOwnTopicsWithoutItsDescriptionTopic(): void
+    {
+        $category = $this->service([
+            new MockResponse(json_encode(['category' => ['id' => 9, 'topic_count' => 2, 'post_count' => 5, 'topic_url' => '/t/a-propos/30']])),
+            new MockResponse(json_encode(['topic_list' => ['topics' => [
+                ['id' => 5, 'category_id' => 4, 'title' => 'Bienvenue', 'slug' => 'bienvenue', 'posts_count' => 1],
+                ['id' => 30, 'category_id' => 9, 'title' => 'À propos', 'slug' => 'a-propos', 'posts_count' => 1],
+                ['id' => 42, 'category_id' => 9, 'title' => 'Atelier vélo', 'slug' => 'atelier-velo', 'posts_count' => 4, 'last_posted_at' => '2026-11-20T10:00:00.000Z'],
+            ]]])),
+        ])->category('9');
+
+        $this->assertSame('https://forum.example.org/latest.json?category=9', $this->sent[1]['url']);
+        $this->assertSame(2, $category['topics']);
+        $this->assertSame(5, $category['posts']);
+        $this->assertSame([[
+            'id' => '42',
+            'title' => 'Atelier vélo',
+            'url' => 'https://forum.example.org/t/atelier-velo/42',
+            'replies' => 3,
+            'lastPostedAt' => '2026-11-20T10:00:00.000Z',
+        ]], $category['latest']);
+    }
 }

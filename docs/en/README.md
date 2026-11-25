@@ -125,6 +125,9 @@ In the form designer, add a "Forum discussion" block. Its settings:
   Without one, topics land in Discourse's default category. When the forum
   does not answer, the designer asks for the category's number instead: the
   last number in its address, `/c/ateliers/5` is `5`.
+- **What each entry opens on the forum**: a topic in the category (the
+  default), or a subcategory of the category with a first topic inside. See
+  [A subcategory per entry](#a-subcategory-per-entry).
 - **Topic tags**: comma separated, set on each topic by the `api_username`
   account, which creates the missing ones if it may. If the forum refuses
   them, the entry keeps its topic, without tags, and a message says so.
@@ -154,6 +157,32 @@ the answer for 15 minutes in `cache/discourse/`.
 The weeks are counted from Discourse's own timeline. Moderator notes such as
 "closed" or "pinned" count as posts, and in a topic of more than 300 posts the
 weeks are an estimate.
+
+### A subcategory per entry
+
+With this choice, saving an entry first creates a subcategory named after it
+(50 characters at most), under the form's category, in its colours. The
+entry's first topic opens in that subcategory. The "Discuss on the forum"
+button leads to the subcategory.
+
+The `api_username` account creates the subcategory and must be a forum admin.
+Discourse limits nesting: the form's category must be top level, unless
+`max_category_nesting` is 3.
+
+The entry's activity becomes the subcategory's: the number of topics, and bars
+that add up the posts of the topics active over the last twelve weeks (30
+topics at most). `/?api/discourse/entries/<entry>/topics` gives the
+subcategory's latest topics as HTML, for an entry tab for instance:
+
+```twig
+<div hx-get="{{ url({tag: 'api/discourse/entries/' ~ entry.id_fiche ~ '/topics'}) }}" hx-trigger="load"></div>
+```
+
+An entry that already had a topic before this choice keeps it, with no
+subcategory. If the forum refuses the subcategory, for instance because
+another one has that name, the entry is not saved. If it refuses the first
+topic, the subcategory just created is deleted and the entry is not saved
+either.
 
 ### In cards
 

@@ -161,4 +161,26 @@ class TopicActivityTest extends YesWikiTestCase
         $this->assertStringContainsString(_t('DISCOURSE_ACTIVITY_REPLIES', ['n' => 7]), $html);
         $this->assertStringContainsString('<svg class="discourse-sparkline"', $html);
     }
+
+    public function testACategoryAddsUpThePostsOfItsRecentTopicsOnly(): void
+    {
+        $recent = gmdate('Y-m-d\\TH:i:s.000\\Z', time() - 86400);
+        $api = $this->api([
+            new MockResponse(json_encode(['category' => ['id' => 9, 'topic_count' => 2, 'post_count' => 9]])),
+            new MockResponse(json_encode(['topic_list' => ['topics' => [
+                ['id' => 42, 'category_id' => 9, 'title' => 'Récent', 'slug' => 'recent', 'posts_count' => 8, 'last_posted_at' => $recent],
+                ['id' => 43, 'category_id' => 9, 'title' => 'Ancien', 'slug' => 'ancien', 'posts_count' => 1, 'last_posted_at' => '2020-01-01T00:00:00.000Z'],
+            ]]])),
+            new MockResponse(json_encode(self::topicJson())),
+        ]);
+        $activities = $this->activity($api);
+
+        $category = $activities->category('9');
+
+        $this->assertSame(3, $this->requests);
+        $this->assertSame(2, $category['topics']);
+        $this->assertSame([30 => 1, 10 => 3, 3 => 1, 0 => 3], $category['postsByDaysAgo']);
+        $this->assertSame($category['latest'], $activities->category('9')['latest']);
+        $this->assertSame(3, $this->requests);
+    }
 }

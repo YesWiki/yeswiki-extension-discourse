@@ -14,4 +14,8 @@ return [
     'DISCOURSE_FORM_BUILDER_TAGS_EXISTING' => 'Comma separated. Already on the forum: %{tags}',
     'DISCOURSE_FORM_BUILDER_TOPIC_BODY' => 'First post of the topic',
     'DISCOURSE_FORM_BUILDER_TOPIC_BODY_HINT' => 'In markdown. {{title}} gives the entry\'s title, {{url}} its address, and {{bf_…}} a field\'s value. Left empty, the post just links to the entry.',
+    'DISCOURSE_FORM_BUILDER_CATEGORY_PER_ENTRY' => 'What each entry opens on the forum',
+    'DISCOURSE_FORM_BUILDER_TOPIC_PER_ENTRY_OPTION' => 'A topic in the forum category',
+    'DISCOURSE_FORM_BUILDER_CATEGORY_PER_ENTRY_OPTION' => 'A subcategory of the forum category, with a first topic',
+    'DISCOURSE_FORM_BUILDER_CATEGORY_PER_ENTRY_HINT' => "A subcategory takes the entry's title. The api_username account creates it and must be a forum admin. Entries that already have a topic keep it.",
 ];

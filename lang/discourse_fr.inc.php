@@ -16,4 +16,10 @@ return [
     'DISCOURSE_ACTIVITY_SPARKLINE_LABEL' => 'Messages ces %{weeks} dernières semaines : %{posts}, dont cette semaine : %{last}',
     'DISCOURSE_ACTIVITY_DATE_FORMAT' => 'd/m',
     'DISCOURSE_PRESENTATION_CARD' => 'Cartes avec l\'activité du forum',
+    'DISCOURSE_CATEGORY_REFUSED' => "La fiche n'est pas enregistrée : le forum refuse d'en faire une rubrique. %{error}",
+    'DISCOURSE_CATEGORY_FAILED' => "La fiche est enregistrée, mais sa rubrique n'a pas pu être créée sur le forum : %{error}",
+    'DISCOURSE_ACTIVITY_TOPICS' => 'Sujets : %{n}',
+    'DISCOURSE_TOPICS_NONE' => 'Pas encore de sujet dans la rubrique de cette fiche.',
+    'DISCOURSE_TOPICS_NEW' => 'Ouvrir la rubrique sur le forum',
+    'DISCOURSE_TOPICS_DATE_FORMAT' => 'd/m/Y',
 ];

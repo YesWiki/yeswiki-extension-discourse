@@ -30,6 +30,32 @@ class ActivityPresenter
     }
 
     /**
+     * The number of topics and the sparkline of a category, as one inline block for an entry or a card.
+     *
+     * @param array<string, mixed> $activity as TopicActivity::category() gives it
+     */
+    public function categoryFragment(array $activity): string
+    {
+        return $this->templateEngine->render('@discourse/discourse-activity.twig', [
+            'topics' => (int)($activity['topics'] ?? 0),
+            'sparkline' => $this->sparkline($activity),
+        ]);
+    }
+
+    /**
+     * The category's latest topics as a list of links, or a sentence saying it has none yet.
+     *
+     * @param array<string, mixed> $activity as TopicActivity::category() gives it
+     */
+    public function topics(array $activity, string $categoryUrl): string
+    {
+        return $this->templateEngine->render('@discourse/discourse-topics.twig', [
+            'topics' => is_array($activity['latest'] ?? null) ? $activity['latest'] : [],
+            'categoryUrl' => $categoryUrl,
+        ]);
+    }
+
+    /**
      * Posts per rolling week, oldest first; the last one ends now.
      *
      * @param array<int, int> $postsByDaysAgo

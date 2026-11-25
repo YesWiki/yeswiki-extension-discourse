@@ -74,37 +74,74 @@ class ApiController extends YesWikiController
         return new RedirectResponse($target);
     }
 
-    /** The replies and sparkline of the topic an entry's discourse field opened, or 204 when there is none to show. */
+    /** The topics and sparkline of an entry's forum category, or else the replies and sparkline of its topic, or 204 when there is none to show. */
     #[Route('/api/discourse/entries/{tag}/activity', methods: ['GET'], options: ['acl' => ['public']])]
     public function entryActivity(string $tag): Response
     {
-        $nothing = new Response('', Response::HTTP_NO_CONTENT);
+        $presenter = $this->getService(ActivityPresenter::class);
+        $activities = $this->getService(TopicActivity::class);
+        foreach ($this->discourseFieldsOf($tag) as [$field, $entry]) {
+            $category = $field->categoryOf($entry);
+            if ($category['categoryId'] !== '') {
+                $activity = $activities->category($category['categoryId']);
+                if ($activity !== null) {
+                    return $this->fragment($presenter->categoryFragment($activity));
+                }
+                continue;
+            }
+            $topicId = $field->topicIdOf($entry);
+            $activity = $topicId === '' ? null : $activities->get($topicId);
+            if ($activity !== null) {
+                return $this->fragment($presenter->fragment($activity));
+            }
+        }
+
+        return new Response('', Response::HTTP_NO_CONTENT);
+    }
+
+    /** The latest topics of an entry's forum category as a list of links, or 204 when the entry has no category. */
+    #[Route('/api/discourse/entries/{tag}/topics', methods: ['GET'], options: ['acl' => ['public']])]
+    public function entryTopics(string $tag): Response
+    {
+        foreach ($this->discourseFieldsOf($tag) as [$field, $entry]) {
+            $category = $field->categoryOf($entry);
+            $activity = $category['categoryId'] === '' ? null : $this->getService(TopicActivity::class)->category($category['categoryId']);
+            if ($activity !== null) {
+                return $this->fragment($this->getService(ActivityPresenter::class)->topics($activity, $category['categoryUrl']));
+            }
+        }
+
+        return new Response('', Response::HTTP_NO_CONTENT);
+    }
+
+    /** @return list<array{0: DiscourseField, 1: array<string, mixed>}> the discourse fields of the entry the visitor may read, with the entry */
+    private function discourseFieldsOf(string $tag): array
+    {
         if (!$this->getService(AclService::class)->hasAccess('read', $tag)) {
-            return $nothing;
+            return [];
         }
         $entry = $this->getService(EntryManager::class)->getOne($tag);
         $formId = is_array($entry) ? (string)($entry['form_id'] ?? $entry['id_typeannonce'] ?? '') : '';
         if ($formId === '') {
-            return $nothing;
+            return [];
         }
-        $form = $this->getService(FormManager::class)->getOne($formId);
-
-        foreach ($form['prepared'] ?? [] as $field) {
-            if (!$field instanceof DiscourseField || !$field->canRead($entry)) {
-                continue;
-            }
-            $topicId = $field->topicIdOf($entry);
-            $activity = $topicId === '' ? null : $this->getService(TopicActivity::class)->get($topicId);
-            if ($activity !== null) {
-                $response = new Response($this->getService(ActivityPresenter::class)->fragment($activity));
-                $response->setPrivate();
-                $response->setMaxAge(300);
-
-                return $response;
+        $fields = [];
+        foreach ($this->getService(FormManager::class)->getOne($formId)['prepared'] ?? [] as $field) {
+            if ($field instanceof DiscourseField && $field->canRead($entry)) {
+                $fields[] = [$field, $entry];
             }
         }
 
-        return $nothing;
+        return $fields;
+    }
+
+    private function fragment(string $html): Response
+    {
+        $response = new Response($html);
+        $response->setPrivate();
+        $response->setMaxAge(300);
+
+        return $response;
     }
 
     private function errorResponse(string $message): Response

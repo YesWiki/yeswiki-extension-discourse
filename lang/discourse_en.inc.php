@@ -16,4 +16,10 @@ return [
     'DISCOURSE_ACTIVITY_SPARKLINE_LABEL' => 'Posts over the last %{weeks} weeks: %{posts}, this week: %{last}',
     'DISCOURSE_ACTIVITY_DATE_FORMAT' => 'm/d',
     'DISCOURSE_PRESENTATION_CARD' => 'Cards with forum activity',
+    'DISCOURSE_CATEGORY_REFUSED' => 'The entry is not saved: the forum will not make a category of it. %{error}',
+    'DISCOURSE_CATEGORY_FAILED' => 'The entry is saved, but its forum category could not be created: %{error}',
+    'DISCOURSE_ACTIVITY_TOPICS' => 'Topics: %{n}',
+    'DISCOURSE_TOPICS_NONE' => "No topic yet in this entry's category.",
+    'DISCOURSE_TOPICS_NEW' => 'Open the category on the forum',
+    'DISCOURSE_TOPICS_DATE_FORMAT' => 'Y-m-d',
 ];

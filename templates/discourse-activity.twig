@@ -1,4 +1,9 @@
 <span class="discourse-activity" style="display: inline-flex; align-items: flex-end; gap: .5em; line-height: 1;">
-  <span class="discourse-activity__replies" role="img" aria-label="{{ _t('DISCOURSE_ACTIVITY_REPLIES', {n: replies}) }}" title="{{ _t('DISCOURSE_ACTIVITY_REPLIES', {n: replies}) }}" style="display: inline-flex; align-items: center; gap: .25em;">{{ icon('message-circle') }}<span aria-hidden="true">{{ replies }}</span></span>
+  {% if topics is defined %}
+    {% set label = _t('DISCOURSE_ACTIVITY_TOPICS', {n: topics}) %}
+    <span class="discourse-activity__topics" role="img" aria-label="{{ label }}" title="{{ label }}" style="display: inline-flex; align-items: center; gap: .25em;">{{ icon('messages') }}<span aria-hidden="true">{{ topics }}</span></span>
+  {% else %}
+    <span class="discourse-activity__replies" role="img" aria-label="{{ _t('DISCOURSE_ACTIVITY_REPLIES', {n: replies}) }}" title="{{ _t('DISCOURSE_ACTIVITY_REPLIES', {n: replies}) }}" style="display: inline-flex; align-items: center; gap: .25em;">{{ icon('message-circle') }}<span aria-hidden="true">{{ replies }}</span></span>
+  {% endif %}
   {{ sparkline|raw }}
 </span>

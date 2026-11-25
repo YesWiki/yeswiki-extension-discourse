@@ -1,4 +1,4 @@
-// The `discourse` field in the form builder: the category, tags and first post of the topics it opens, from the forum's own lists.
+// The `discourse` field in the form builder: the category, whether each entry gets a category of its own, the tags and first post of the topics it opens.
 const container = document.getElementById('form-builder-container')
 let discourse = {}
 try {
@@ -39,6 +39,14 @@ window.formBuilderFields.discourse = ({ readConf, writeConf }) => ({
           value: '',
           description: _t('DISCOURSE_FORM_BUILDER_CATEGORY_ID_HINT'),
         },
+    category_per_entry: {
+      label: _t('DISCOURSE_FORM_BUILDER_CATEGORY_PER_ENTRY'),
+      options: {
+        '': _t('DISCOURSE_FORM_BUILDER_TOPIC_PER_ENTRY_OPTION'),
+        1: _t('DISCOURSE_FORM_BUILDER_CATEGORY_PER_ENTRY_OPTION'),
+      },
+      description: _t('DISCOURSE_FORM_BUILDER_CATEGORY_PER_ENTRY_HINT'),
+    },
     tags: {
       label: _t('DISCOURSE_FORM_BUILDER_TAGS'),
       value: '',

@@ -1,0 +1,20 @@
+{# The latest topics of an entry's forum category, newest activity first. #}
+<div class="discourse-topics">
+  {% if topics is empty %}
+    <p class="yw-text-muted">{{ _t('DISCOURSE_TOPICS_NONE') }}</p>
+  {% else %}
+    <ul class="discourse-topics__list">
+      {% for topic in topics %}
+        <li class="discourse-topics__item">
+          <a href="{{ topic.url }}" target="_blank" rel="noopener">{{ topic.title }}</a>
+          <span class="yw-text-muted discourse-topics__meta">
+            {{ _t('DISCOURSE_ACTIVITY_REPLIES', {n: topic.replies}) }}{% if topic.lastPostedAt %} · {{ topic.lastPostedAt|date(_t('DISCOURSE_TOPICS_DATE_FORMAT')) }}{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  {% if categoryUrl %}
+    <a class="yw-btn yw-btn--primary" href="{{ categoryUrl }}" target="_blank" rel="noopener">{{ _t('DISCOURSE_TOPICS_NEW') }}</a>
+  {% endif %}
+</div>

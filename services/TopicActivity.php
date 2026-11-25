@@ -5,11 +5,12 @@ namespace YesWiki\Discourse\Service;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use YesWiki\Kernel\Service\Journal;
 
-/** A topic's activity, kept a quarter of an hour in cache/discourse/ so that a page of cards asks Discourse once. */
+/** A topic's or a category's activity, kept a quarter of an hour in cache/discourse/ so that a page of cards asks Discourse once. */
 class TopicActivity
 {
     public const TTL = 900;
     public const ERROR_TTL = 300;
+    public const CATEGORY_TOPICS = 30;
 
     private string $cacheDir;
 
@@ -29,11 +30,49 @@ class TopicActivity
      */
     public function get(string $topicId, bool $fetch = true): ?array
     {
-        if (!ctype_digit($topicId) || !$this->api->isConfigured()) {
+        if (!ctype_digit($topicId)) {
             return null;
         }
 
-        $cached = $this->read($topicId);
+        return $this->cached($topicId, $fetch, fn () => $this->api->topic($topicId));
+    }
+
+    /**
+     * A category's counts, latest topics, and the posts per day of the topics active in the weeks a sparkline shows.
+     *
+     * @return array<string, mixed>|null topics, posts, latest, postsByDaysAgo and fetchedAt
+     */
+    public function category(string $categoryId, bool $fetch = true): ?array
+    {
+        if (!ctype_digit($categoryId)) {
+            return null;
+        }
+
+        return $this->cached('category-' . $categoryId, $fetch, function () use ($categoryId): array {
+            $category = $this->api->category($categoryId);
+            $since = time() - ActivityPresenter::WEEKS * 7 * 86400;
+            $days = [];
+            foreach (array_slice($category['latest'], 0, self::CATEGORY_TOPICS) as $topic) {
+                if ($topic['lastPostedAt'] === '' || strtotime($topic['lastPostedAt']) < $since) {
+                    continue;
+                }
+                foreach ($this->get($topic['id'])['postsByDaysAgo'] ?? [] as $daysAgo => $posts) {
+                    $days[$daysAgo] = ($days[$daysAgo] ?? 0) + (int)$posts;
+                }
+            }
+
+            return $category + ['postsByDaysAgo' => $days];
+        });
+    }
+
+    /** @return array<string, mixed>|null what $fetch gives, kept TTL seconds, or null for ERROR_TTL seconds when it fails */
+    private function cached(string $key, bool $fetch, callable $read): ?array
+    {
+        if (!$this->api->isConfigured()) {
+            return null;
+        }
+
+        $cached = $this->read($key);
         if ($cached !== null) {
             return $cached['activity'];
         }
@@ -42,14 +81,14 @@ class TopicActivity
         }
 
         try {
-            $activity = $this->api->topic($topicId) + ['fetchedAt' => time()];
+            $activity = $read() + ['fetchedAt' => time()];
         } catch (\Throwable $e) {
-            $this->journal->warning("discourse: no activity for topic $topicId: " . $e->getMessage());
-            $this->write($topicId, null, self::ERROR_TTL);
+            $this->journal->warning("discourse: no activity for $key: " . $e->getMessage());
+            $this->write($key, null, self::ERROR_TTL);
 
             return null;
         }
-        $this->write($topicId, $activity, self::TTL);
+        $this->write($key, $activity, self::TTL);
 
         return $activity;
     }
@@ -61,9 +100,9 @@ class TopicActivity
     }
 
     /** @return array{activity: array<string, mixed>|null}|null */
-    private function read(string $topicId): ?array
+    private function read(string $key): ?array
     {
-        $file = $this->file($topicId);
+        $file = $this->file($key);
         if (!is_file($file)) {
             return null;
         }
@@ -79,23 +118,23 @@ class TopicActivity
     }
 
     /** @param array<string, mixed>|null $activity */
-    private function write(string $topicId, ?array $activity, int $ttl): void
+    private function write(string $key, ?array $activity, int $ttl): void
     {
         if (!is_dir($this->cacheDir) && !@mkdir($this->cacheDir, 0o775, true) && !is_dir($this->cacheDir)) {
             return;
         }
-        $file = $this->file($topicId);
+        $file = $this->file($key);
         $tmp = $file . '.' . bin2hex(random_bytes(4));
         if (@file_put_contents($tmp, json_encode(['expires' => time() + $ttl, 'activity' => $activity])) !== false) {
             @rename($tmp, $file);
         }
     }
 
-    private function file(string $topicId): string
+    private function file(string $key): string
     {
         $config = $this->params->has('discourse_connect') ? $this->params->get('discourse_connect') : [];
-        $key = is_array($config) ? (string)($config['api_key'] ?? '') . (string)($config['url'] ?? '') : '';
+        $secret = is_array($config) ? (string)($config['api_key'] ?? '') . (string)($config['url'] ?? '') : '';
 
-        return $this->cacheDir . '/' . hash_hmac('sha256', $topicId, $key) . '.json';
+        return $this->cacheDir . '/' . hash_hmac('sha256', $key, $secret) . '.json';
     }
 }

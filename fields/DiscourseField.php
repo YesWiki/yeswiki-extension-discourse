@@ -18,7 +18,7 @@ use YesWiki\Kernel\Service\FlashMessageService;
 use YesWiki\Kernel\Service\Journal;
 use YesWiki\Kernel\Service\UrlFormatter;
 
-/** `discourse`: saving an entry without a topic opens one about it on the Discourse forum, and the entry links to it. */
+/** `discourse`: saving an entry without a topic opens one about it on the Discourse forum, in a category of its own if the form asks, and the entry links to it. */
 #[Field(['discourse'])]
 class DiscourseField extends BazarField
 {
@@ -27,11 +27,15 @@ class DiscourseField extends BazarField
     protected const FIELD_CATEGORY = 6;
     protected const FIELD_TAGS = 7;
     protected const FIELD_TOPIC_BODY = 13;
+    protected const FIELD_CATEGORY_PER_ENTRY = 14;
+
+    private const NONE = ['topicId' => '', 'topicUrl' => '', 'categoryId' => '', 'categoryUrl' => ''];
 
     protected string $category;
     /** @var list<string> */
     protected array $tags;
     protected string $topicBody;
+    protected bool $categoryPerEntry;
 
     public function __construct(array $values, ContainerInterface $services)
     {
@@ -39,6 +43,7 @@ class DiscourseField extends BazarField
         $this->category = trim((string)($values[self::FIELD_CATEGORY] ?? ''));
         $this->tags = array_values(array_filter(array_map('trim', explode(',', (string)($values[self::FIELD_TAGS] ?? ''))), 'strlen'));
         $this->topicBody = trim((string)($values[self::FIELD_TOPIC_BODY] ?? ''));
+        $this->categoryPerEntry = in_array($values[self::FIELD_CATEGORY_PER_ENTRY] ?? '', [true, 1, '1', 'true', 'yes'], true);
     }
 
     public function getCategory(): string
@@ -57,6 +62,12 @@ class DiscourseField extends BazarField
         return $this->topicBody;
     }
 
+    /** Whether each entry gets its own category, under the form's, with its topic inside. */
+    public function opensACategoryPerEntry(): bool
+    {
+        return $this->categoryPerEntry;
+    }
+
     public function requiresTagBeforeFormatting()
     {
         return true;
@@ -67,6 +78,8 @@ class DiscourseField extends BazarField
         return [$this->propertyName => [
             'topicId' => ['_mode_' => 'single', '_type_' => 'string'],
             'topicUrl' => ['_mode_' => 'single', '_type_' => 'string'],
+            'categoryId' => ['_mode_' => 'single', '_type_' => 'string'],
+            'categoryUrl' => ['_mode_' => 'single', '_type_' => 'string'],
         ]];
     }
 
@@ -78,26 +91,27 @@ class DiscourseField extends BazarField
         }
 
         $page = $this->getService(PageManager::class)->getOne($tag);
-        if (!empty($page)) {
-            $stored = $this->storedValue(is_array($page['body'] ?? null) ? $page['body'] : []);
-            if ($stored['topicId'] !== '') {
-                return [(string)$this->propertyName => $stored];
-            }
+        $stored = $this->storedValue(empty($page) ? [] : (is_array($page['body'] ?? null) ? $page['body'] : []));
+        if ($stored['topicId'] !== '') {
+            return [(string)$this->propertyName => $stored];
         }
 
-        return [(string)$this->propertyName => $this->createTopic($entry, $tag)];
+        return [(string)$this->propertyName => $this->createTopic($entry, $tag, $stored)];
     }
 
     /**
-     * @param array<string, mixed> $entry
+     * Opens the entry's topic, first creating its category when the form asks for one and the entry has none yet.
      *
-     * @return array{topicId: string, topicUrl: string}
+     * @param array<string, mixed>                                                              $entry
+     * @param array{topicId: string, topicUrl: string, categoryId: string, categoryUrl: string} $stored
      *
-     * @throws EntryValidationException when the forum refuses the topic, so the entry is not saved either
+     * @return array{topicId: string, topicUrl: string, categoryId: string, categoryUrl: string}
+     *
+     * @throws EntryValidationException when the forum refuses the category or the topic, so the entry is not saved either
      */
-    protected function createTopic(array $entry, string $tag): array
+    protected function createTopic(array $entry, string $tag, array $stored = self::NONE): array
     {
-        $none = ['topicId' => '', 'topicUrl' => ''];
+        $none = array_merge(self::NONE, ['categoryId' => $stored['categoryId'], 'categoryUrl' => $stored['categoryUrl']]);
         $api = $this->getService(DiscourseApiService::class);
         if (!$api->isConfigured()) {
             $this->getService(FlashMessageService::class)->setMessage(_t('DISCOURSE_API_NOT_CONFIGURED'));
@@ -108,6 +122,21 @@ class DiscourseField extends BazarField
         $title = trim(strip_tags(html_entity_decode((string)($entry['title'] ?? $tag), ENT_QUOTES, 'UTF-8')));
         $url = $this->getService(UrlFormatter::class)->href('', $tag, null, false);
         $user = $this->getService(AuthenticationService::class)->getLoggedUser();
+        $category = ['categoryId' => $none['categoryId'], 'categoryUrl' => $none['categoryUrl']];
+
+        if ($this->categoryPerEntry && $category['categoryId'] === '') {
+            try {
+                $category = $api->createCategory($title, $this->category);
+            } catch (TopicRefusedException $e) {
+                throw new EntryValidationException(_t('DISCOURSE_CATEGORY_REFUSED', ['error' => $e->getMessage()]), 0, $e);
+            } catch (\Throwable $e) {
+                $this->getService(Journal::class)->error("discourse: no category for entry $tag: " . $e->getMessage(), ['exception' => $e]);
+                $this->getService(FlashMessageService::class)->setMessage(_t('DISCOURSE_CATEGORY_FAILED', ['error' => $e->getMessage()]));
+
+                return $none;
+            }
+            $none = array_merge(self::NONE, $category);
+        }
 
         try {
             $topic = $api->createTopic(
@@ -115,10 +144,13 @@ class DiscourseField extends BazarField
                 $this->topicBody === ''
                     ? _t('DISCOURSE_TOPIC_BODY', ['title' => str_replace(['[', ']'], '', $title), 'url' => $url])
                     : $this->fillTopicBody($entry, $title, $url),
-                $this->category,
+                $category['categoryId'] !== '' ? $category['categoryId'] : $this->category,
                 is_array($user) ? (string)($user['name'] ?? '') : ''
             );
         } catch (TopicRefusedException $e) {
+            if ($category['categoryId'] !== '' && $category['categoryId'] !== $stored['categoryId']) {
+                $api->deleteCategory($category['categoryId']);
+            }
             throw new EntryValidationException(_t('DISCOURSE_TOPIC_REFUSED', ['error' => $e->getMessage()]), 0, $e);
         } catch (\Throwable $e) {
             $this->getService(Journal::class)->error("discourse: no topic for entry $tag: " . $e->getMessage(), ['exception' => $e]);
@@ -136,7 +168,7 @@ class DiscourseField extends BazarField
             }
         }
 
-        return $topic;
+        return $topic + $category;
     }
 
     /**
@@ -163,7 +195,7 @@ class DiscourseField extends BazarField
         $stored = $this->storedValue($entry);
 
         return $this->render('@discourse/discourse-input.twig', [
-            'topicUrl' => $stored['topicUrl'],
+            'topicUrl' => $stored['categoryUrl'] !== '' ? $stored['categoryUrl'] : $stored['topicUrl'],
             'activity' => $this->activityOf($stored),
         ]);
     }
@@ -172,22 +204,29 @@ class DiscourseField extends BazarField
     {
         $stored = $this->storedValue($entry);
 
-        if ($stored['topicUrl'] === '') {
+        $url = $stored['categoryUrl'] !== '' ? $stored['categoryUrl'] : $stored['topicUrl'];
+        if ($url === '') {
             return '';
         }
 
         return $this->render('@discourse/discourse-field.twig', [
-            'topicUrl' => $stored['topicUrl'],
+            'topicUrl' => $url,
             'activity' => $this->activityOf($stored),
         ]);
     }
 
-    /** The topic's activity fragment shown beside the forum button, or '' when there is none yet. */
+    /** The category's or else the topic's activity fragment shown beside the forum button, or '' when there is none yet. */
     private function activityOf(array $stored): string
     {
+        $presenter = $this->getService(ActivityPresenter::class);
+        if ($stored['categoryId'] !== '') {
+            $activity = $this->getService(TopicActivity::class)->category($stored['categoryId']);
+
+            return $activity === null ? '' : $presenter->categoryFragment($activity);
+        }
         $activity = $stored['topicId'] === '' ? null : $this->getService(TopicActivity::class)->get($stored['topicId']);
 
-        return $activity === null ? '' : $this->getService(ActivityPresenter::class)->fragment($activity);
+        return $activity === null ? '' : $presenter->fragment($activity);
     }
 
     /** @param array<string, mixed>|null $entry */
@@ -198,20 +237,37 @@ class DiscourseField extends BazarField
         return ctype_digit($topicId) ? $topicId : '';
     }
 
+    /** @param array<string, mixed>|null $entry */
+    public function categoryOf($entry): array
+    {
+        $stored = $this->storedValue($entry);
+
+        return ctype_digit($stored['categoryId']) ? ['categoryId' => $stored['categoryId'], 'categoryUrl' => $stored['categoryUrl']] : ['categoryId' => '', 'categoryUrl' => ''];
+    }
+
     /**
      * @param array<string, mixed>|null $entry
      *
-     * @return array{topicId: string, topicUrl: string}
+     * @return array{topicId: string, topicUrl: string, categoryId: string, categoryUrl: string}
      */
     protected function storedValue($entry): array
     {
         $value = $this->getValue($entry);
         $value = is_array($value) ? $value : [];
-        $url = is_string($value['topicUrl'] ?? null) ? $value['topicUrl'] : '';
 
         return [
             'topicId' => is_scalar($value['topicId'] ?? null) ? (string)$value['topicId'] : '',
-            'topicUrl' => in_array(strtolower((string)parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true) ? $url : '',
+            'topicUrl' => self::webUrl($value['topicUrl'] ?? null),
+            'categoryId' => is_scalar($value['categoryId'] ?? null) ? (string)$value['categoryId'] : '',
+            'categoryUrl' => self::webUrl($value['categoryUrl'] ?? null),
         ];
+    }
+
+    /** $url when it is an http or https address, '' otherwise. */
+    private static function webUrl(mixed $url): string
+    {
+        $url = is_string($url) ? $url : '';
+
+        return in_array(strtolower((string)parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true) ? $url : '';
     }
 }
